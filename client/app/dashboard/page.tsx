@@ -33,7 +33,7 @@ export default function Dashboard() {
       color: "#FCBA00",
     },
     {
-      title: "Propiedades",
+      title: "Servicios",
       value: "156",
       change: "+5%",
       icon: Building2,
@@ -113,7 +113,7 @@ export default function Dashboard() {
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="pipeline">Pipeline de Ventas</TabsTrigger>
             <TabsTrigger value="contacts">Contactos</TabsTrigger>
-            <TabsTrigger value="properties">Propiedades</TabsTrigger>
+            <TabsTrigger value="properties">Servicios</TabsTrigger>
             <TabsTrigger value="activities">Actividades</TabsTrigger>
           </TabsList>
 

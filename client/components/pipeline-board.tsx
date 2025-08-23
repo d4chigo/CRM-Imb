@@ -1,237 +1,60 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd"
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Phone, Mail, DollarSign, Calendar, User, Search } from "lucide-react"
+import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
+import { formatCurrency } from "@/lib/currency"
+import { NewOpportunityDialog } from "@/components/forms/NewOpportunityDialog"
+import { EmailDialog } from "@/components/forms/EmailDialog"
+import { CallDialog } from "@/components/forms/CallDialog"
+import { useToast } from "@/hooks/use-toast"
 
-interface Opportunity {
-  id: string
-  clientName: string
-  propertyTitle: string
-  agent: string
-  value: number
-  probability: number
-  closeDate: string
-  phone: string
-  email: string
-}
-
-interface Column {
-  id: string
-  title: string
-  opportunities: Opportunity[]
-  color: string
-}
-
-const initialData: Column[] = [
-  {
-    id: "contacto_inicial",
-    title: "Contacto Inicial",
-    color: "#94A3B8",
-    opportunities: [
-      {
-        id: "1",
-        clientName: "Ana Martínez",
-        propertyTitle: "Departamento 2 hab - Torre A",
-        agent: "Juan Pérez",
-        value: 220000,
-        probability: 10,
-        closeDate: "2024-02-15",
-        phone: "+51987654321",
-        email: "ana@email.com",
-      },
-      {
-        id: "2",
-        clientName: "Carlos Ruiz",
-        propertyTitle: "Casa en San Isidro",
-        agent: "María García",
-        value: 450000,
-        probability: 15,
-        closeDate: "2024-02-20",
-        phone: "+51987654322",
-        email: "carlos@email.com",
-      },
-    ],
-  },
-  {
-    id: "calificacion",
-    title: "Calificación",
-    color: "#FCBA00",
-    opportunities: [
-      {
-        id: "3",
-        clientName: "Luis Torres",
-        propertyTitle: "Departamento 3 hab - Torre B",
-        agent: "Carlos López",
-        value: 280000,
-        probability: 25,
-        closeDate: "2024-02-10",
-        phone: "+51987654323",
-        email: "luis@email.com",
-      },
-    ],
-  },
-  {
-    id: "presentacion",
-    title: "Presentación",
-    color: "#F59E0B",
-    opportunities: [
-      {
-        id: "4",
-        clientName: "Patricia Silva",
-        propertyTitle: "Departamento 2 hab - Torre A",
-        agent: "Juan Pérez",
-        value: 220000,
-        probability: 40,
-        closeDate: "2024-01-30",
-        phone: "+51987654324",
-        email: "patricia@email.com",
-      },
-    ],
-  },
-  {
-    id: "negociacion",
-    title: "Negociación",
-    color: "#EF4444",
-    opportunities: [
-      {
-        id: "5",
-        clientName: "Roberto Díaz",
-        propertyTitle: "Casa en San Isidro",
-        agent: "María García",
-        value: 450000,
-        probability: 60,
-        closeDate: "2024-01-25",
-        phone: "+51987654325",
-        email: "roberto@email.com",
-      },
-    ],
-  },
-  {
-    id: "propuesta",
-    title: "Propuesta",
-    color: "#8B5CF6",
-    opportunities: [
-      {
-        id: "6",
-        clientName: "Elena Vega",
-        propertyTitle: "Departamento 3 hab - Torre B",
-        agent: "Carlos López",
-        value: 280000,
-        probability: 80,
-        closeDate: "2024-01-20",
-        phone: "+51987654326",
-        email: "elena@email.com",
-      },
-    ],
-  },
-  {
-    id: "cierre_ganado",
-    title: "Cierre Ganado",
-    color: "#10B981",
-    opportunities: [
-      {
-        id: "7",
-        clientName: "Miguel Santos",
-        propertyTitle: "Departamento 2 hab - Torre A",
-        agent: "Juan Pérez",
-        value: 220000,
-        probability: 100,
-        closeDate: "2024-01-15",
-        phone: "+51987654327",
-        email: "miguel@email.com",
-      },
-    ],
-  },
-]
+/**
+ * Componente de tablero de pipeline de ventas.
+ *
+ * Renderiza las columnas con sus oportunidades y permite arrastrar y soltar
+ * entre etapas. Incluye barra de búsqueda y totales por columna.
+ */
 
 export function PipelineBoard() {
-  const [columns, setColumns] = useState<Column[]>(initialData)
-  const [searchTerm, setSearchTerm] = useState("")
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addOpportunity } = usePipelineDnd()
+  const { toast } = useToast()
 
-  const filteredColumns = useMemo(() => {
-    if (!searchTerm) return columns
+  // Estado de diálogos
+  const [openNew, setOpenNew] = React.useState(false)
+  const [openEmail, setOpenEmail] = React.useState(false)
+  const [openCall, setOpenCall] = React.useState(false)
+  const [emailDefaults, setEmailDefaults] = React.useState<{ to?: string; subject?: string; body?: string }>({})
+  const [callDefaults, setCallDefaults] = React.useState<{ phone?: string; outcome?: any; notes?: string }>({})
 
-    return columns.map((column) => ({
-      ...column,
-      opportunities: column.opportunities.filter(
-        (opportunity) =>
-          opportunity.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          opportunity.propertyTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          opportunity.agent.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    }))
-  }, [columns, searchTerm])
-
-  const calculateColumnTotal = (opportunities: Opportunity[]) => {
-    return opportunities.reduce((total, opportunity) => total + opportunity.value, 0)
+  function handleCreate(values: import("@/components/forms/NewOpportunityDialog").NewOpportunityFormValues) {
+    addOpportunity(values.columnId, {
+      clientName: values.clientName,
+      serviceName: values.serviceName,
+      agent: values.agent,
+      value: values.value,
+      probability: values.probability,
+      closeDate: values.closeDate,
+      phone: values.phone,
+      email: values.email,
+    })
+    toast({ title: "Oportunidad creada", description: `${values.clientName} • ${values.serviceName}` })
   }
 
-  const onDragEnd = (result: DropResult) => {
-    const { destination, source, draggableId } = result
-
-    if (!destination) {
-      return
-    }
-
-    if (destination.droppableId === source.droppableId && destination.index === source.index) {
-      return
-    }
-
-    const sourceColumn = columns.find((col) => col.id === source.droppableId)
-    const destColumn = columns.find((col) => col.id === destination.droppableId)
-
-    if (!sourceColumn || !destColumn) {
-      return
-    }
-
-    if (sourceColumn === destColumn) {
-      const newOpportunities = Array.from(sourceColumn.opportunities)
-      const [removed] = newOpportunities.splice(source.index, 1)
-      newOpportunities.splice(destination.index, 0, removed)
-
-      const newColumn = {
-        ...sourceColumn,
-        opportunities: newOpportunities,
-      }
-
-      setColumns(columns.map((col) => (col.id === newColumn.id ? newColumn : col)))
-    } else {
-      const sourceOpportunities = Array.from(sourceColumn.opportunities)
-      const destOpportunities = Array.from(destColumn.opportunities)
-      const [removed] = sourceOpportunities.splice(source.index, 1)
-      destOpportunities.splice(destination.index, 0, removed)
-
-      const newSourceColumn = {
-        ...sourceColumn,
-        opportunities: sourceOpportunities,
-      }
-
-      const newDestColumn = {
-        ...destColumn,
-        opportunities: destOpportunities,
-      }
-
-      setColumns(
-        columns.map((col) => {
-          if (col.id === newSourceColumn.id) return newSourceColumn
-          if (col.id === newDestColumn.id) return newDestColumn
-          return col
-        }),
-      )
-    }
+  function handleSendEmail(values: import("@/components/forms/EmailDialog").EmailFormValues) {
+    // Aquí podrías integrar tu API de email
+    toast({ title: "Email enviado", description: `Para: ${values.to}` })
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("es-PE", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount)
+  function handleSaveCall(values: import("@/components/forms/CallDialog").CallFormValues) {
+    // Aquí podrías integrar tu API/registro de llamadas
+    toast({ title: "Llamada registrada", description: `${values.outcome}` })
   }
 
   return (
@@ -243,7 +66,11 @@ export function PipelineBoard() {
           </h2>
           <p className="text-gray-600">Arrastra las oportunidades entre las etapas</p>
         </div>
-        <Button style={{ backgroundColor: "#FCBA00" }} className="text-white hover:opacity-90">
+        <Button
+          style={{ backgroundColor: "#FCBA00" }}
+          className="text-white hover:opacity-90"
+          onClick={() => setOpenNew(true)}
+        >
           Nueva Oportunidad
         </Button>
       </div>
@@ -251,7 +78,7 @@ export function PipelineBoard() {
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
-          placeholder="Buscar por cliente, propiedad o agente..."
+          placeholder="Buscar por cliente, servicio o agente..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
@@ -322,7 +149,7 @@ export function PipelineBoard() {
                                           {opportunity.clientName}
                                         </h4>
                                         <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                          {opportunity.propertyTitle}
+                                          {opportunity.serviceName}
                                         </p>
                                       </div>
                                       <Badge
@@ -361,10 +188,26 @@ export function PipelineBoard() {
 
                                     <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                                       <div className="flex items-center space-x-1">
-                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-gray-100">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 hover:bg-gray-100"
+                                          onClick={() => {
+                                            setCallDefaults({ phone: opportunity.phone })
+                                            setOpenCall(true)
+                                          }}
+                                        >
                                           <Phone className="h-3 w-3 text-gray-500" />
                                         </Button>
-                                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:bg-gray-100">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 hover:bg-gray-100"
+                                          onClick={() => {
+                                            setEmailDefaults({ to: opportunity.email })
+                                            setOpenEmail(true)
+                                          }}
+                                        >
                                           <Mail className="h-3 w-3 text-gray-500" />
                                         </Button>
                                       </div>
@@ -396,6 +239,16 @@ export function PipelineBoard() {
           </div>
         </div>
       </DragDropContext>
+
+      {/* Diálogos */}
+      <NewOpportunityDialog
+        open={openNew}
+        onOpenChange={setOpenNew}
+        columns={columns}
+        onSubmit={handleCreate}
+      />
+      <EmailDialog open={openEmail} onOpenChange={setOpenEmail} defaults={emailDefaults} onSubmit={handleSendEmail} />
+      <CallDialog open={openCall} onOpenChange={setOpenCall} defaults={callDefaults} onSubmit={handleSaveCall} />
     </div>
   )
 }
