@@ -8,14 +8,35 @@ CREATE DATABASE IF NOT EXISTS `crm_imb`
   COLLATE utf8mb4_0900_ai_ci;
 USE `crm_imb`;
 
--- Tabla de agentes/comerciales
+-- Tabla de usuarios del sistema (agentes, supervisores, administradores)
+CREATE TABLE IF NOT EXISTS `usuarios` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `nombre_completo` VARCHAR(120) NOT NULL,
+  `email` VARCHAR(160) UNIQUE NOT NULL,
+  `password_hash` VARCHAR(255) NOT NULL, -- Hash bcrypt de la contraseña
+  `telefono` VARCHAR(40),
+  `rol` ENUM('agente', 'supervisor', 'admin') DEFAULT 'agente',
+  `activo` BOOLEAN DEFAULT TRUE,
+  `ultimo_login` DATETIME,
+  `refresh_token` TEXT, -- Token de refresco para renovación de sesión
+  `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `actualizado_en` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_email` (`email`),
+  INDEX `idx_rol` (`rol`),
+  INDEX `idx_activo` (`activo`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla de agentes/comerciales (mantener compatibilidad)
 CREATE TABLE IF NOT EXISTS `agentes` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `usuario_id` INT UNSIGNED, -- Referencia a tabla usuarios
   `nombre_completo` VARCHAR(120) NOT NULL,
   `email` VARCHAR(160) UNIQUE,
   `telefono` VARCHAR(40),
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuarios`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de contactos/clientes potenciales
