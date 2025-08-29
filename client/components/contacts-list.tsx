@@ -8,60 +8,9 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Phone, Mail, MapPin, Plus } from "lucide-react"
 
-const contacts = [
-  {
-    id: 1,
-    name: "Ana Martínez",
-    email: "ana@email.com",
-    phone: "+51987654321",
-    type: "lead",
-    source: "web",
-    budget: { min: 200000, max: 250000 },
-    interest: "apartamento",
-    zone: "San Isidro",
-    agent: "Juan Pérez",
-    lastContact: "2024-01-15",
-  },
-  {
-    id: 2,
-    name: "Carlos Ruiz",
-    email: "carlos@email.com",
-    phone: "+51987654322",
-    type: "prospecto",
-    source: "referido",
-    budget: { min: 400000, max: 500000 },
-    interest: "casa",
-    zone: "Miraflores",
-    agent: "María García",
-    lastContact: "2024-01-14",
-  },
-  {
-    id: 3,
-    name: "Luis Torres",
-    email: "luis@email.com",
-    phone: "+51987654323",
-    type: "cliente",
-    source: "redes_sociales",
-    budget: { min: 250000, max: 300000 },
-    interest: "apartamento",
-    zone: "San Borja",
-    agent: "Carlos López",
-    lastContact: "2024-01-13",
-  },
-  {
-    id: 4,
-    name: "Patricia Silva",
-    email: "patricia@email.com",
-    phone: "+51987654324",
-    type: "lead",
-    source: "publicidad",
-    budget: { min: 180000, max: 220000 },
-    interest: "apartamento",
-    zone: "Surco",
-    agent: "Juan Pérez",
-    lastContact: "2024-01-12",
-  },
-]
+// TODO: Conectar con datos reales de la base de datos
+// Datos de ejemplo eliminados - deben cargarse desde la BD
+const contacts: any[] = []
 
 export function ContactsList() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -182,89 +131,24 @@ export function ContactsList() {
       </Card>
 
       {/* Contacts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredContacts.map((contact) => (
-          <Card key={contact.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-3">
-                  <Avatar>
-                    <AvatarFallback style={{ backgroundColor: "#FCBA0020", color: "#FCBA00" }}>
-                      {contact.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <CardTitle className="text-lg">{contact.name}</CardTitle>
-                    <CardDescription>{contact.agent}</CardDescription>
-                  </div>
-                </div>
-                <Badge
-                  style={{
-                    backgroundColor: `${getTypeColor(contact.type)}20`,
-                    color: getTypeColor(contact.type),
-                    border: `1px solid ${getTypeColor(contact.type)}`,
-                  }}
-                >
-                  {getTypeLabel(contact.type)}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Mail className="h-4 w-4" />
-                  <span>{contact.email}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <Phone className="h-4 w-4" />
-                  <span>{contact.phone}</span>
-                </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <MapPin className="h-4 w-4" />
-                  <span>{contact.zone}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-500">Interés</p>
-                    <p className="font-medium capitalize">{contact.interest}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">Presupuesto</p>
-                    <p className="font-medium">
-                      {formatCurrency(contact.budget.min)} - {formatCurrency(contact.budget.max)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-xs text-gray-500">Último contacto: {contact.lastContact}</span>
-                <div className="flex space-x-1">
-                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                    <Phone className="h-3 w-3" />
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                    <Mail className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {filteredContacts.length === 0 && (
+      {filteredContacts.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
-            <p className="text-gray-500">No se encontraron contactos que coincidan con los filtros.</p>
+            <p className="text-gray-500">
+              No hay contactos para mostrar.
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              Los contactos deben cargarse desde la base de datos.
+            </p>
+            <p className="text-sm text-gray-400">
+              Implementar conexión con API de contactos.
+            </p>
           </CardContent>
         </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* TODO: Renderizar contactos desde la BD cuando estén disponibles */}
+        </div>
       )}
     </div>
   )
