@@ -17,36 +17,9 @@ export default function Dashboard() {
     window.location.href = "/"
   }
 
-  const stats = [
-    {
-      title: "Contactos Activos",
-      value: "247",
-      change: "+12%",
-      icon: Users,
-      color: "#FCBA00",
-    },
-    {
-      title: "Oportunidades",
-      value: "89",
-      change: "+8%",
-      icon: TrendingUp,
-      color: "#FCBA00",
-    },
-    {
-      title: "Servicios",
-      value: "156",
-      change: "+5%",
-      icon: Building2,
-      color: "#FCBA00",
-    },
-    {
-      title: "Ventas del Mes",
-      value: "$2.4M",
-      change: "+15%",
-      icon: DollarSign,
-      color: "#FCBA00",
-    },
-  ]
+  // TODO: Conectar con datos reales de la base de datos
+  // Estadísticas eliminadas - deben venir de la BD
+  // const stats = []
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -84,29 +57,8 @@ export default function Dashboard() {
       </header>
 
       <div className="p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold" style={{ color: "#303030" }}>
-                      {stat.value}
-                    </p>
-                    <p className="text-sm" style={{ color: stat.color }}>
-                      {stat.change} vs mes anterior
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-full" style={{ backgroundColor: `${stat.color}20` }}>
-                    <stat.icon className="h-6 w-6" style={{ color: stat.color }} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* TODO: Stats Cards - Conectar con datos reales de la BD */}
+        {/* Sección de estadísticas eliminada - debe implementarse con datos de la base de datos */}
 
         {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -136,19 +88,14 @@ export default function Dashboard() {
                 <CardDescription>Próximas reuniones y seguimientos</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {[1, 2, 3].map((item) => (
-                    <div key={item} className="flex items-center space-x-4 p-4 border rounded-lg">
-                      <div className="p-2 rounded-full" style={{ backgroundColor: "#FCBA0020" }}>
-                        <Calendar className="h-4 w-4" style={{ color: "#FCBA00" }} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">Reunión con cliente - María García</p>
-                        <p className="text-sm text-gray-500">Hoy 15:30 - Presentación Residencial Los Pinos</p>
-                      </div>
-                      <Badge variant="outline">Pendiente</Badge>
-                    </div>
-                  ))}
+                {/* TODO: Conectar con datos reales de la base de datos */}
+                <div className="p-8 text-center">
+                  <p className="text-gray-500">
+                    Las actividades deben cargarse desde la base de datos.
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Implementar conexión con API de actividades
+                  </p>
                 </div>
               </CardContent>
             </Card>
