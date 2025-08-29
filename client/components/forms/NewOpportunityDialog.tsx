@@ -140,7 +140,7 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
               name="value"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor (USD)</FormLabel>
+                  <FormLabel>Valor (SOL)</FormLabel>
                   <FormControl>
                     <Input type="number" min={0} step={1000} placeholder="0" {...field} />
                   </FormControl>

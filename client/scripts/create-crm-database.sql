@@ -30,8 +30,8 @@ CREATE TABLE contactos (
     telefono_secundario VARCHAR(20),
     tipo_contacto ENUM('lead', 'cliente', 'prospecto') DEFAULT 'lead',
     fuente_contacto ENUM('web', 'telefono', 'referido', 'redes_sociales', 'evento', 'publicidad', 'otro') DEFAULT 'web',
-    presupuesto_min DECIMAL(12,2),
-    presupuesto_max DECIMAL(12,2),
+    presupuesto_min DECIMAL(12,2), -- Presupuesto mínimo en SOL (Soles Peruanos)
+    presupuesto_max DECIMAL(12,2), -- Presupuesto máximo en SOL (Soles Peruanos)
     tipo_propiedad_interes ENUM('casa', 'apartamento', 'terreno', 'comercial', 'oficina') DEFAULT 'apartamento',
     zona_interes VARCHAR(200),
     observaciones TEXT,
@@ -62,8 +62,8 @@ CREATE TABLE proyectos (
     fecha_entrega_estimada DATE,
     total_unidades INT DEFAULT 0,
     unidades_disponibles INT DEFAULT 0,
-    precio_desde DECIMAL(12,2),
-    precio_hasta DECIMAL(12,2),
+    precio_desde DECIMAL(12,2), -- Precio mínimo en SOL (Soles Peruanos)
+    precio_hasta DECIMAL(12,2), -- Precio máximo en SOL (Soles Peruanos)
     activo BOOLEAN DEFAULT TRUE,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
@@ -89,7 +89,7 @@ CREATE TABLE propiedades (
     banos INT DEFAULT 0,
     parqueaderos INT DEFAULT 0,
     piso INT,
-    precio DECIMAL(12,2) NOT NULL,
+    precio DECIMAL(12,2) NOT NULL, -- Precio en SOL (Soles Peruanos)
     precio_negociable BOOLEAN DEFAULT TRUE,
     estado_propiedad ENUM('disponible', 'reservada', 'vendida', 'construccion') DEFAULT 'disponible',
     estado_publicacion ENUM('activa', 'pausada', 'inactiva') DEFAULT 'activa',
@@ -120,12 +120,12 @@ CREATE TABLE oportunidades (
     agente_id INT NOT NULL,
     etapa ENUM('contacto_inicial', 'calificacion', 'presentacion', 'negociacion', 'propuesta', 'cierre_ganado', 'cierre_perdido') DEFAULT 'contacto_inicial',
     probabilidad_cierre INT DEFAULT 10, -- Porcentaje de 0-100
-    valor_estimado DECIMAL(12,2),
+    valor_estimado DECIMAL(12,2), -- Valor estimado de la oportunidad en SOL (Soles Peruanos)
     fecha_cierre_estimada DATE,
     fecha_cierre_real DATE,
     motivo_perdida ENUM('precio', 'financiamiento', 'competencia', 'timing', 'no_calificado', 'otro'),
     notas_motivo_perdida TEXT,
-    comision_esperada DECIMAL(10,2),
+    comision_esperada DECIMAL(10,2), -- Comisión esperada en SOL (Soles Peruanos)
     observaciones TEXT,
     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

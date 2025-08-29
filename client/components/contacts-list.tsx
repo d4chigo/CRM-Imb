@@ -52,8 +52,8 @@ export function ContactsList() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("es-PE", {
-      style: "currency",
-      currency: "USD",
+      style: "currency", 
+      currency: "PEN", // Cambiado de USD a PEN (Nuevo Sol Peruano)
       minimumFractionDigits: 0,
     }).format(amount)
   }

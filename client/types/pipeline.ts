@@ -13,7 +13,7 @@ export interface Opportunity {
   serviceName: string
   /** Nombre del agente asignado */
   agent: string
-  /** Valor estimado de la oportunidad en USD */
+  /** Valor estimado de la oportunidad en SOL (Soles Peruanos) */
   value: number
   /** Probabilidad de cierre (0-100) */
   probability: number
