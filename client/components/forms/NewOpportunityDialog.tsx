@@ -19,14 +19,15 @@ import type { Column } from "@/types/pipeline"
 
 const schema = z.object({
   clientName: z.string().min(2, "El nombre es requerido"),
-  serviceName: z.enum([
-    "Compra de propiedades",
-    "Venta de propiedades",
-    "Crédito MiVivienda",
-    "Programa Techo Propio",
-  ], {
-    required_error: "Selecciona un servicio",
-  }),
+  serviceName: z.string().min(1, "Selecciona un servicio"), // TODO: Convertir a enum dinámico desde BD
+  // serviceName: z.enum([
+  //   "Compra de propiedades",
+  //   "Venta de propiedades", 
+  //   "Crédito MiVivienda",
+  //   "Programa Techo Propio",
+  // ], {
+  //   required_error: "Selecciona un servicio",
+  // }), // TODO: Obtener servicios desde la base de datos
   agent: z.string().min(2, "El agente es requerido"),
   value: z.coerce.number().min(0, "El valor debe ser >= 0"),
   probability: z.coerce.number().min(0).max(100),
@@ -57,8 +58,8 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
     resolver: zodResolver(schema),
     defaultValues: {
       clientName: "",
-      serviceName: "Compra de propiedades",
-      agent: "",
+      serviceName: "", // TODO: Valor por defecto desde configuración 
+      agent: "", // TODO: Obtener agente desde sesión del usuario
       value: 0,
       probability: 10,
       closeDate: "",
@@ -109,10 +110,12 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      {/* TODO: Cargar servicios dinámicamente desde la BD */}
                       <SelectItem value="Compra de propiedades">Compra de propiedades</SelectItem>
                       <SelectItem value="Venta de propiedades">Venta de propiedades</SelectItem>
                       <SelectItem value="Crédito MiVivienda">Crédito MiVivienda</SelectItem>
                       <SelectItem value="Programa Techo Propio">Programa Techo Propio</SelectItem>
+                      {/* Servicios hardcodeados - deben venir de la BD */}
                     </SelectContent>
                   </Select>
                   <FormMessage />

@@ -40,7 +40,8 @@ export default function Dashboard() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <User className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium">Juan Pérez</span>
+              {/* TODO: Obtener datos del usuario desde la sesión/BD */}
+              <span className="text-sm font-medium">Usuario</span>
               <Badge variant="secondary">Agente</Badge>
             </div>
             <Button
