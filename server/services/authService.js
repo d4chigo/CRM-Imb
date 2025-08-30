@@ -68,15 +68,17 @@ class AuthService {
   static async authenticateUser(email, password) {
     try {
       // Buscar usuario por email
-      const user = await queryOne(
+      const rows = await executeQuery(
         'SELECT id, nombre_completo, email, password_hash, rol, activo FROM usuarios WHERE email = ?',
-        [email.toLowerCase().trim()]
+        [email]
       );
 
+      const user = rows[0];
       if (!user) {
         throw new Error('Credenciales inválidas');
       }
 
+      // Verificar si el usuario está activo
       if (!user.activo) {
         throw new Error('Usuario inactivo. Contacta al administrador.');
       }

@@ -18,8 +18,6 @@ const config = {
     queueLimit: 0,
     // Configuraciones de seguridad para MySQL
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    acquireTimeout: 60000,
-    timeout: 60000,
   },
 
   // Configuración de JWT y autenticación
