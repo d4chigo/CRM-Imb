@@ -136,15 +136,23 @@ export function ContactsList() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={async () => {
-            // Abrir popup inmediatamente para evitar bloqueo del navegador
-            const popup = openGoogleImportPopup('about:blank');
+            const popup = openGoogleImportPopup('about:blank'); // abrir antes para evitar bloqueo
             try {
+              if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
               const url = await getGoogleContactsAuthUrl();
-              if (popup) popup.location.href = url;
-              toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso a tus contactos.' });
+              if (popup) popup.location.replace(url);
+              toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
             } catch(e:any) {
-              if (popup) popup.close();
-              const msg = e?.message?.includes('401') ? 'Debes iniciar sesión' : e.message;
+              const msg = e?.message?.includes('401') ? 'Sesión expirada. Vuelve a iniciar sesión.' : (e.message || 'Error desconocido');
+              if (popup) {
+                popup.document.open();
+                popup.document.write(`<div style="font-family:sans-serif;padding:16px;max-width:360px;">`+
+                  `<h3>Fallo al iniciar importación</h3>`+
+                  `<p style="color:#b91c1c;">${msg}</p>`+
+                  `<p style="font-size:12px;color:#555;">Mantén esta ventana abierta y vuelve atrás para reintentar después de solucionar el problema.</p>`+
+                  `</div>`);
+                popup.document.close();
+              }
               toast({ title:'Error importando', description: msg, variant:'destructive' });
             }
           }}>
