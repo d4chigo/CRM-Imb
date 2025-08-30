@@ -29,6 +29,25 @@ class GoogleContactsController {
 
   static async callback(req, res) {
     try {
+      // Manejo de errores que Google devuelve directamente (usuario canceló o app no autorizada)
+      if (req.query.error) {
+        const { error, error_description } = req.query;
+        console.warn('[googleImport] Callback con error de Google:', error, error_description || '');
+        const state = req.query.state;
+        if (state === 'popup') {
+          return res.send(`<!doctype html><html><head><title>Importación cancelada</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">
+            <h3>Importación cancelada</h3>
+            <p>${error === 'access_denied' ? 'No diste permisos o la app no está autorizada.' : 'Error: ' + error}</p>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'google-import-error', error: '${error}', description: ${JSON.stringify(error_description || '')} }, '*');
+                setTimeout(()=> window.close(), 1200);
+              }
+            </script>
+          </body></html>`);
+        }
+        return res.status(400).json({ success:false, error, description: error_description });
+      }
       const code = req.query.code;
       const state = req.query.state; // 'popup' si viene de flujo con ventana
       if (!code) return res.status(400).json({ success:false, message:'Código no provisto' });
