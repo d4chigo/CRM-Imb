@@ -36,12 +36,10 @@ export function PipelineBoard() {
   const [callDefaults, setCallDefaults] = React.useState<{ phone?: string; outcome?: any; notes?: string }>({})
 
   // Formulario de nueva etapa
-  const [stageId, setStageId] = React.useState("")
   const [stageTitle, setStageTitle] = React.useState("")
   const [stageColor, setStageColor] = React.useState("#6366F1")
 
   function resetStageForm() {
-    setStageId("")
     setStageTitle("")
     setStageColor("#6366F1")
   }
@@ -70,14 +68,13 @@ export function PipelineBoard() {
 
   async function handleAddStage(e: React.FormEvent) {
     e.preventDefault()
-    const id = stageId.trim().toLowerCase().replace(/\s+/g, "_")
-    if (!id || !stageTitle.trim()) {
-      toast({ title: "Datos incompletos", description: "ID y Título son requeridos", variant: "destructive" })
+    if (!stageTitle.trim()) {
+      toast({ title: "Datos incompletos", description: "Título es requerido", variant: "destructive" })
       return
     }
     try {
-      await createStage({ id, title: stageTitle.trim(), color: stageColor })
-      addColumn({ id, title: stageTitle.trim(), color: stageColor })
+      const created = await createStage({ id: '', title: stageTitle.trim(), color: stageColor })
+      addColumn({ id: created.id, title: created.title, color: created.color })
       toast({ title: "Etapa agregada", description: `${stageTitle}` })
       resetStageForm()
     } catch (err: any) {
@@ -156,11 +153,7 @@ export function PipelineBoard() {
                 <div className="grid gap-6">
                   <form onSubmit={handleAddStage} className="space-y-3">
                     <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-1">
-                        <label className="text-xs font-medium text-gray-600">ID</label>
-                        <Input value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="id_etapa" />
-                      </div>
-                      <div className="col-span-2">
+                      <div className="col-span-3">
                         <label className="text-xs font-medium text-gray-600">Título</label>
                         <Input value={stageTitle} onChange={(e) => setStageTitle(e.target.value)} placeholder="Título visible" />
                       </div>

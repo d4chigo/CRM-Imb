@@ -84,7 +84,7 @@ async function ensureSchema() {
       for (const d of defaults) {
         await conn.query(`INSERT INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES (?,?,?,?)`, [d.id, d.titulo, d.color, d.orden]);
       }
-      console.log('🌱 Etapas por defecto insertadas en etapas_pipeline');
+  console.log('🌱 Etapas por defecto insertadas (solo primera inicialización)');
     }
     conn.release();
   } catch (e) {

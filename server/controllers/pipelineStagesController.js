@@ -3,7 +3,7 @@ const PipelineStagesService = require('../services/pipelineStagesService');
 
 class PipelineStagesController {
   static validateCreate = [
-    body('id').isString().trim().isLength({ min: 2, max: 64 }).matches(/^[a-z0-9_]+$/).withMessage('ID inválido'),
+    body('id').optional().isString().trim().isLength({ min: 2, max: 64 }).matches(/^[a-z0-9_]+$/).withMessage('ID inválido'),
     body('title').isString().trim().isLength({ min: 2, max: 80 }).withMessage('Título inválido'),
     body('color').isString().matches(/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/).withMessage('Color hex inválido')
   ];
@@ -30,7 +30,20 @@ class PipelineStagesController {
       return res.status(400).json({ success: false, message: 'Datos inválidos', errors: errors.array() });
     }
     try {
-      const created = await PipelineStagesService.create(req.body);
+      // Generar slug automático si no se provee id
+      let { id, title, color } = req.body;
+      if (!id) {
+        const base = title
+          .toString()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '') // quitar acentos
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '')
+          .slice(0, 64);
+        id = base || `etapa_${Date.now()}`;
+      }
+      const created = await PipelineStagesService.create({ id, title, color });
       res.status(201).json({ success: true, data: created });
     } catch (e) {
       const status = e.message.includes('existe') ? 409 : 400;
