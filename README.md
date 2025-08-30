@@ -36,24 +36,19 @@ Ejecutar el esquema (opcional si ya existe):
 mysql -u root -p crm_imb < database/crm_schema.sql
 ```
 
-### 3. Configurar Backend
+### 3. Variables de Entorno (ahora en la RAÍZ)
+
+Instalar dependencias backend:
 ```bash
 cd server
 pnpm install
 ```
 
-Crear archivo `.env` en `server/` con:
-```env
-PORT=4000
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=crm_imb
-JWT_SECRET=tu_jwt_secret_super_seguro
-JWT_REFRESH_SECRET=tu_refresh_secret_super_seguro
-FRONTEND_URL=http://localhost:3000
+Copiar `.env.example` de la raíz a `.env` (también en la raíz):
+```bash
+cp .env.example .env   # Windows PowerShell: copy .env.example .env
 ```
+Edita los secrets y credenciales. El backend leerá primero `./.env`.
 
 ### 4. Configurar Frontend
 ```bash
@@ -61,7 +56,10 @@ cd ../client
 pnpm install
 ```
 
-Crear archivo `.env.local` en `client/` con:
+Opcional: si quieres sobre-escribir variables sólo para el frontend, crea `client/.env.local`.
+Si no, el código usa las variables compiladas existentes (NEXT_PUBLIC_...).
+
+Variables mínimas para frontend (si decides crear `.env.local`):
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_APP_NAME=CRM Inmobiliario
@@ -147,3 +145,18 @@ CRM-Imb/
 
 ---
 **Desarrollado para gestión inmobiliaria profesional** 🏠
+
+## ☁️ Importación de Contactos de Google
+
+1. Crea credenciales OAuth (tipo Aplicación Web) en Google Cloud.
+2. Añade URI de redirección: `http://localhost:4000/api/google/contacts/callback`.
+3. Copia CLIENT_ID y CLIENT_SECRET a `.env` (raíz):
+```
+GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxxxx
+GOOGLE_REDIRECT_URI=http://localhost:4000/api/google/contacts/callback
+```
+4. Reinicia backend y frontend.
+5. En la vista Contactos pulsa "Importar Google". Se abrirá popup, autoriza y se cerrará con un toast del resultado.
+
+Deduplicación: se omiten contactos cuyo email o teléfono ya existan.

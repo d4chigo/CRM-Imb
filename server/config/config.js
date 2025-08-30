@@ -1,5 +1,13 @@
 // Configuración del servidor CRM Inmobiliario
-require('dotenv').config();
+// Cargar variables de entorno desde la raíz del monorepo primero (../.env), fallback a local
+const path = require('path');
+const fs = require('fs');
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else {
+  require('dotenv').config();
+}
 
 const config = {
   // Configuración del servidor
