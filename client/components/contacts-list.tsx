@@ -22,6 +22,7 @@ export function ContactsList() {
   const [openNew, setOpenNew] = useState(false)
   const [contacts, setContacts] = useState<ContactDTO[]>([])
   const [loading, setLoading] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { columns, addOpportunity } = usePipelineDnd()
   const { toast } = useToast();
@@ -50,9 +51,10 @@ export function ContactsList() {
 
   // Listener para mensaje de popup de importación
   useEffect(() => {
-    function handleMessage(ev: MessageEvent) {
+  function handleMessage(ev: MessageEvent) {
       if (ev.data && ev.data.type === 'google-import-result') {
-        toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
+    setImporting(false)
+    toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
         loadContacts()
       }
     }
@@ -135,14 +137,16 @@ export function ContactsList() {
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={async () => {
+      <Button variant="outline" onClick={async () => {
             const popup = openGoogleImportPopup('about:blank'); // abrir antes para evitar bloqueo
             try {
+        setImporting(true)
               if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
               const url = await getGoogleContactsAuthUrl();
               if (popup) popup.location.replace(url);
               toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
             } catch(e:any) {
+        setImporting(false)
               const msg = e?.message?.includes('401') ? 'Sesión expirada. Vuelve a iniciar sesión.' : (e.message || 'Error desconocido');
               if (popup) {
                 popup.document.open();
@@ -261,6 +265,14 @@ export function ContactsList() {
       onOpenChange={setOpenNew}
       onSubmit={handleCreateContact}
     />
+    {importing && (
+      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+        <div className="bg-white rounded-md p-6 shadow-md text-center space-y-2">
+          <p className="font-medium">Importando contactos de Google...</p>
+          <p className="text-sm text-gray-500">Puedes continuar; esta ventana se cerrará al terminar.</p>
+        </div>
+      </div>
+    )}
     </div>
   )
 }
