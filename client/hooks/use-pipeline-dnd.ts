@@ -102,13 +102,32 @@ export function usePipelineDnd() {
     )
   }
 
-  return {
-    columns,
-    setColumns,
-    searchTerm,
-    setSearchTerm,
-    filteredColumns,
-    onDragEnd,
-    addOpportunity,
+  /**
+   * Añadir una nueva etapa/columna al pipeline.
+   * Evita duplicados por id.
+   */
+  function addColumn(column: { id: string; title: string; color: string }) {
+    setColumns((prev) => {
+      if (prev.some((c) => c.id === column.id)) return prev
+      return [...prev, { ...column, opportunities: [] }]
+    })
   }
+
+  /**
+   * Eliminar una etapa/columna por id.
+   * No elimina si contiene oportunidades (forzar requiere paso adicional UI).
+   */
+  function removeColumn(id: string): boolean {
+    let removed = false
+    setColumns((prev) => {
+      const col = prev.find((c) => c.id === id)
+      if (!col) return prev
+      if (col.opportunities.length > 0) return prev // proteger datos
+      removed = true
+      return prev.filter((c) => c.id !== id)
+    })
+    return removed
+  }
+
+  return { columns, setColumns, searchTerm, setSearchTerm, filteredColumns, onDragEnd, addOpportunity, addColumn, removeColumn }
 }
