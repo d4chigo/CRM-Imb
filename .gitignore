@@ -16,12 +16,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (permitir .env.example)
+# env files (solo se versiona .env.example)
 /.env
 /.env.local
-/.env.production
 /.env.development
-# Ignore nested .env inside server just in case
+/.env.development.local
+/.env.production
+/.env.production.local
 server/.env
 !.env.example
 
