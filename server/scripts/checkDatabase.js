@@ -1,5 +1,13 @@
 // Script para verificar la base de datos
-require('dotenv').config();
+// Carga el .env desde la RAÍZ del monorepo (../..). Si no existe, intenta local.
+const path = require('path');
+const fs = require('fs');
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else {
+  require('dotenv').config();
+}
 const { executeQuery, testConnection } = require('../config/database');
 
 async function checkDatabase() {

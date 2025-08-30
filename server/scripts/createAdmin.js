@@ -1,5 +1,13 @@
 // Script para crear usuario administrador inicial en CRM Inmobiliario
-require('dotenv').config();
+// Carga variables desde raíz (../..)
+const path = require('path');
+const fs = require('fs');
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnv)) {
+  require('dotenv').config({ path: rootEnv });
+} else {
+  require('dotenv').config();
+}
 const AuthService = require('../services/authService');
 const { testConnection } = require('../config/database');
 

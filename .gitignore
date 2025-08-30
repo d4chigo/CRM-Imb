@@ -17,10 +17,12 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (permitir .env.example)
-.env
-.env.local
-.env.production
-.env.development
+/.env
+/.env.local
+/.env.production
+/.env.development
+# Ignore nested .env inside server just in case
+server/.env
 !.env.example
 
 # vercel
