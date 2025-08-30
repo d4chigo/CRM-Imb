@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,43 @@ export function ContactsList() {
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Refs para manejo robusto del popup y watchers
+  const popupRef = useRef<Window | null>(null)
+  const watcherRef = useRef<number | null>(null)
+  const timeoutRef = useRef<number | null>(null)
+
+  // ---- Helpers globales dentro del componente ----
+  function clearWatchers() {
+    if (watcherRef.current) { clearInterval(watcherRef.current); watcherRef.current = null }
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+  }
+  function finalizeImport(imported:number, skipped:number) {
+    setImporting(false)
+    clearWatchers()
+    popupRef.current = null
+    toast({ title: 'Importación completada', description: `Importados: ${imported} | Duplicados: ${skipped}` })
+    loadContacts()
+  }
+  function failImport(msg:string) {
+    setImporting(false)
+    clearWatchers()
+    popupRef.current = null
+    toast({ title: 'Importación', description: msg, variant: 'destructive' })
+  }
+  function checkLocalStorageFallback() {
+    try {
+      const stored = localStorage.getItem('googleImportResult')
+      if (stored) {
+        const data = JSON.parse(stored)
+        if (data && data.ts && Date.now() - data.ts < 20000) {
+          localStorage.removeItem('googleImportResult')
+          finalizeImport(data.imported || 0, data.skipped || 0)
+          return true
+        }
+      }
+    } catch(_) {}
+    return false
+  }
   const { columns, addOpportunity } = usePipelineDnd()
   const { toast } = useToast();
 
@@ -51,23 +88,28 @@ export function ContactsList() {
 
   // Listener para mensaje de popup de importación
   useEffect(() => {
+
   function handleMessage(ev: MessageEvent) {
       if (!ev.data) return;
       if (ev.data.type === 'google-import-result') {
-        setImporting(false)
-        toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
-        loadContacts()
+        finalizeImport(ev.data.imported, ev.data.skipped)
       } else if (ev.data.type === 'google-import-error') {
-        setImporting(false)
         const err = (ev.data.error || '').toString();
         let description = ev.data.description || 'Error en autorización con Google';
         if (err === 'access_denied') {
           description = 'Acceso denegado. Asegúrate de que tu correo esté añadido como Test User en Google Cloud (OAuth consent screen) y vuelve a intentar.';
         }
-        toast({ title: 'Importación cancelada', description, variant: 'destructive' });
+        failImport(description)
       }
     }
     window.addEventListener('message', handleMessage)
+    // Fallback al recuperar foco (user cerró popup)
+    function onFocus() {
+      if (popupRef.current && popupRef.current.closed && importing) {
+        if (!checkLocalStorageFallback()) failImport('Popup cerrado sin completar.')
+      }
+    }
+    window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
@@ -147,54 +189,46 @@ export function ContactsList() {
         </div>
         <div className="flex gap-2">
       <Button variant="outline" onClick={async () => {
+            if (importing) return;
             const popup = openGoogleImportPopup('about:blank');
-            let closedWatcher: any = null;
+            popupRef.current = popup;
             try {
               setImporting(true)
               if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
               const url = await getGoogleContactsAuthUrl();
               if (popup) popup.location.replace(url);
               toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
-              // Polling fallback: si popup se cierra sin mensaje limpiamos overlay
-              const start = Date.now();
-              closedWatcher = setInterval(() => {
-                // Fallback: revisar localStorage por resultado almacenado
-                try {
-                  const stored = localStorage.getItem('googleImportResult');
-                  if (stored) {
-                    const data = JSON.parse(stored);
-                    if (data && data.ts && Date.now() - data.ts < 15000) {
-                      setImporting(false);
-                      toast({ title: 'Importación completada', description: `Importados: ${data.imported} | Duplicados: ${data.skipped}` });
-                      localStorage.removeItem('googleImportResult');
-                      loadContacts();
-                      clearInterval(closedWatcher);
-                      return;
-                    }
+              // Interval para detectar cierre + fallback almacenamiento
+              const started = Date.now();
+              watcherRef.current = window.setInterval(() => {
+                if (checkLocalStorageFallback()) return; // ya se limpió dentro
+                if (popupRef.current && popupRef.current.closed) {
+                  if (Date.now() - started > 800) {
+                    failImport('Popup cerrado sin completar.');
+                  } else {
+                    // cierre inmediato: quizá el navegador bloqueó; intentamos fallback
+                    if (!checkLocalStorageFallback()) failImport('Popup bloqueado o cerrado.');
                   }
-                } catch(_) {}
-                if (popup && popup.closed) {
-                  if (Date.now() - start > 500 && importing) {
-                    setImporting(false);
-                    toast({ title: 'Importación', description: 'Popup cerrado sin completar.', variant: 'destructive' });
-                  }
-                  clearInterval(closedWatcher);
                 }
               }, 400);
+              // Timeout duro por si nada llega
+              timeoutRef.current = window.setTimeout(() => {
+                if (importing) {
+                  if (!checkLocalStorageFallback()) failImport('Tiempo de espera agotado (20s)');
+                }
+              }, 20000);
             } catch(e:any) {
-              setImporting(false)
-              if (closedWatcher) clearInterval(closedWatcher);
               const msg = e?.message?.includes('401') ? 'Sesión expirada. Vuelve a iniciar sesión.' : (e.message || 'Error desconocido');
+              failImport(msg)
               if (popup) {
                 popup.document.open();
                 popup.document.write(`<div style="font-family:sans-serif;padding:16px;max-width:360px;">`+
                   `<h3>Fallo al iniciar importación</h3>`+
-                  `<p style="color:#b91c1c;">${msg}</p>`+
-                  `<p style="font-size:12px;color:#555;">Mantén esta ventana abierta y vuelve atrás para reintentar después de solucionar el problema.</p>`+
+                  `<p style=\"color:#b91c1c;\">${msg}</p>`+
+                  `<p style=\"font-size:12px;color:#555;\">Cierra esta ventana y reintenta.</p>`+
                   `</div>`);
                 popup.document.close();
               }
-              toast({ title:'Error importando', description: msg, variant:'destructive' });
             }
           }}>
             <Download className="h-4 w-4 mr-2" />Importar Google
