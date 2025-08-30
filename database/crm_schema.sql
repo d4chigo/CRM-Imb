@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS `contactos` (
   `nombre_completo` VARCHAR(120) NOT NULL,
   `email` VARCHAR(160),
   `telefono` VARCHAR(40),
+  `tipo` ENUM('lead','prospecto','cliente') DEFAULT 'lead',
+  `origen` VARCHAR(80),
+  `notas` TEXT,
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -63,6 +66,7 @@ CREATE TABLE IF NOT EXISTS `etapas_pipeline` (
   `id` VARCHAR(64) NOT NULL,          -- Ej.: 'contacto_inicial'
   `titulo` VARCHAR(80) NOT NULL,      -- Ej.: 'Contacto Inicial'
   `color_hex` VARCHAR(9) NOT NULL,    -- Ej.: '#94A3B8'
+  `orden` INT NOT NULL DEFAULT 0,     -- Orden de visualización
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

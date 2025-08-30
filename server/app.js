@@ -17,6 +17,7 @@ const {
 // Importar rutas
 const authRoutes = require('./routes/auth');
 const pipelineRoutes = require('./routes/pipeline');
+const contactsRoutes = require('./routes/contacts');
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 // Rutas de pipeline
 app.use('/api/pipeline', pipelineRoutes);
+app.use('/api/contacts', contactsRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {
