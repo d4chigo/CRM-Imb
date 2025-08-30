@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
-import { Phone, Mail, DollarSign, Calendar, User, Search } from "lucide-react"
+import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2 } from "lucide-react"
 import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
 import { formatCurrency } from "@/lib/currency"
 import { NewOpportunityDialog } from "@/components/forms/NewOpportunityDialog"
@@ -23,15 +24,48 @@ import { useToast } from "@/hooks/use-toast"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addOpportunity } = usePipelineDnd()
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addOpportunity, addColumn, removeColumn } = usePipelineDnd()
   const { toast } = useToast()
 
   // Estado de diálogos
   const [openNew, setOpenNew] = React.useState(false)
   const [openEmail, setOpenEmail] = React.useState(false)
   const [openCall, setOpenCall] = React.useState(false)
+  const [manageOpen, setManageOpen] = React.useState(false)
   const [emailDefaults, setEmailDefaults] = React.useState<{ to?: string; subject?: string; body?: string }>({})
   const [callDefaults, setCallDefaults] = React.useState<{ phone?: string; outcome?: any; notes?: string }>({})
+
+  // Formulario de nueva etapa
+  const [stageId, setStageId] = React.useState("")
+  const [stageTitle, setStageTitle] = React.useState("")
+  const [stageColor, setStageColor] = React.useState("#6366F1")
+
+  function resetStageForm() {
+    setStageId("")
+    setStageTitle("")
+    setStageColor("#6366F1")
+  }
+
+  function handleAddStage(e: React.FormEvent) {
+    e.preventDefault()
+    const id = stageId.trim().toLowerCase().replace(/\s+/g, "_")
+    if (!id || !stageTitle.trim()) {
+      toast({ title: "Datos incompletos", description: "ID y Título son requeridos", variant: "destructive" })
+      return
+    }
+    addColumn({ id, title: stageTitle.trim(), color: stageColor })
+    toast({ title: "Etapa agregada", description: `${stageTitle}` })
+    resetStageForm()
+  }
+
+  function handleRemoveStage(id: string, title: string) {
+    const ok = removeColumn(id)
+    if (ok) {
+      toast({ title: "Etapa eliminada", description: title })
+    } else {
+      toast({ title: "No se pudo eliminar", description: "La etapa tiene oportunidades o no existe", variant: "destructive" })
+    }
+  }
 
   function handleCreate(values: import("@/components/forms/NewOpportunityDialog").NewOpportunityFormValues) {
     addOpportunity(values.columnId, {
@@ -59,30 +93,80 @@ export function PipelineBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>
             Pipeline de Ventas
           </h2>
           <p className="text-gray-600">Arrastra las oportunidades entre las etapas</p>
         </div>
-        <Button
-          style={{ backgroundColor: "#FCBA00" }}
-          className="text-white hover:opacity-90"
-          onClick={() => setOpenNew(true)}
-        >
-          Nueva Oportunidad
-        </Button>
+        <div className="flex items-center gap-2">
+            <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Settings2 className="h-4 w-4" /> Gestionar Etapas
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Gestionar Etapas del Pipeline</DialogTitle>
+                  <DialogDescription>Añade nuevas etapas o elimina las vacías. (Pendiente: persistir en BD)</DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-6">
+                  <form onSubmit={handleAddStage} className="space-y-3">
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="col-span-1">
+                        <label className="text-xs font-medium text-gray-600">ID</label>
+                        <Input value={stageId} onChange={(e) => setStageId(e.target.value)} placeholder="id_etapa" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-medium text-gray-600">Título</label>
+                        <Input value={stageTitle} onChange={(e) => setStageTitle(e.target.value)} placeholder="Título visible" />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="text-xs font-medium text-gray-600">Color</label>
+                        <div className="flex items-center gap-2">
+                          <Input type="color" className="w-16 p-1 cursor-pointer" value={stageColor} onChange={(e) => setStageColor(e.target.value)} />
+                          <div className="text-xs text-gray-500">{stageColor}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button type="submit" className="flex items-center gap-2" style={{ backgroundColor: "#FCBA00" }}>
+                        <Plus className="h-4 w-4" /> Agregar
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2" style={{ color: "#303030" }}>Etapas actuales</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {columns.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
+                            <span>{c.title}</span>
+                            <Badge variant="secondary" className="text-[10px]">{c.opportunities.length}</Badge>
+                          </div>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-red-50" onClick={() => handleRemoveStage(c.id, c.title)} disabled={c.opportunities.length > 0}>
+                            <Trash2 className={`h-4 w-4 ${c.opportunities.length > 0 ? 'text-gray-300' : 'text-red-500'}`} />
+                          </Button>
+                        </div>
+                      ))}
+                      {columns.length === 0 && <p className="text-xs text-gray-500">No hay etapas.</p>}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <Button style={{ backgroundColor: "#FCBA00" }} className="text-white hover:opacity-90" onClick={() => setOpenNew(true)}>
+              Nueva Oportunidad
+            </Button>
+        </div>
       </div>
 
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="Buscar por cliente, servicio o agente..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10"
-        />
+        <Input placeholder="Buscar por cliente, servicio o agente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
