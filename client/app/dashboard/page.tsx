@@ -9,12 +9,39 @@ import { Building2, Users, TrendingUp, Calendar, DollarSign, User, LogOut } from
 import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
 import { PropertiesList } from "@/components/properties-list"
+import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("pipeline")
+  const { user, logout } = useAuth()
+  
+  // Proteger ruta - redirigir a login si no está autenticado
+  const { isAuthenticated, loading } = useRequireAuth()
 
-  const handleLogout = () => {
-    window.location.href = "/"
+  const handleLogout = async () => {
+    try {
+      await logout()
+      window.location.href = "/login"
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error)
+    }
+  }
+
+  // Mostrar loading mientras se verifica autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Si no está autenticado, no mostrar contenido (useRequireAuth redirigirá)
+  if (!isAuthenticated) {
+    return null
   }
 
   // TODO: Conectar con datos reales de la base de datos
@@ -40,9 +67,10 @@ export default function Dashboard() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <User className="h-4 w-4 text-gray-500" />
-              {/* TODO: Obtener datos del usuario desde la sesión/BD */}
-              <span className="text-sm font-medium">Usuario</span>
-              <Badge variant="secondary">Agente</Badge>
+              <span className="text-sm font-medium">{user?.name || 'Usuario'}</span>
+              <Badge variant="secondary">
+                {user?.role === 'admin' ? 'Administrador' : 'Agente'}
+              </Badge>
             </div>
             <Button
               variant="outline"

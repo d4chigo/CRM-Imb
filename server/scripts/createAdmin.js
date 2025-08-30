@@ -17,10 +17,10 @@ async function createAdminUser() {
 
     // Datos del administrador por defecto
     const adminData = {
-      nombre: 'Administrador CRM',
+      name: 'Administrador CRM',
       email: 'admin@crm-inmobiliario.com',
       password: 'Admin123!', // Cambiar esta contraseña después del primer login
-      rol: 'admin'
+      role: 'admin'
     };
 
     console.log(`📧 Creando usuario admin con email: ${adminData.email}`);
@@ -31,9 +31,9 @@ async function createAdminUser() {
     console.log('✅ Usuario administrador creado exitosamente!');
     console.log('📋 Datos del usuario:');
     console.log(`   ID: ${adminUser.id}`);
-    console.log(`   Nombre: ${adminUser.nombre}`);
+    console.log(`   Nombre: ${adminUser.name}`);
     console.log(`   Email: ${adminUser.email}`);
-    console.log(`   Rol: ${adminUser.rol}`);
+    console.log(`   Rol: ${adminUser.role}`);
     console.log('');
     console.log('🔐 Credenciales por defecto:');
     console.log(`   Email: ${adminData.email}`);
