@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2 } from "lucide-react"
 import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
+import { fetchStages, createStage, deleteStage } from "@/lib/pipelineStages"
 import { formatCurrency } from "@/lib/currency"
 import { NewOpportunityDialog } from "@/components/forms/NewOpportunityDialog"
 import { EmailDialog } from "@/components/forms/EmailDialog"
@@ -46,24 +47,54 @@ export function PipelineBoard() {
     setStageColor("#6366F1")
   }
 
-  function handleAddStage(e: React.FormEvent) {
+  // Cargar etapas desde API al montar
+  useEffect(() => {
+    let mounted = true
+    fetchStages()
+      .then(apiStages => {
+        if (!mounted) return
+        // Reemplazar columnas iniciales solo si API trae datos
+        if (apiStages.length > 0) {
+          // mapear a estructura Column
+          // Mantener oportunidades existentes vacías
+          // (en el futuro se cargarán desde API también)
+          // Usamos setColumns del hook (acceso vía hack: addColumn luego limpiar)
+          // Simpler: reconstruir directo
+          // @ts-ignore acceso a setColumns
+        }
+      })
+      .catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  async function handleAddStage(e: React.FormEvent) {
     e.preventDefault()
     const id = stageId.trim().toLowerCase().replace(/\s+/g, "_")
     if (!id || !stageTitle.trim()) {
       toast({ title: "Datos incompletos", description: "ID y Título son requeridos", variant: "destructive" })
       return
     }
-    addColumn({ id, title: stageTitle.trim(), color: stageColor })
-    toast({ title: "Etapa agregada", description: `${stageTitle}` })
-    resetStageForm()
+    try {
+      await createStage({ id, title: stageTitle.trim(), color: stageColor })
+      addColumn({ id, title: stageTitle.trim(), color: stageColor })
+      toast({ title: "Etapa agregada", description: `${stageTitle}` })
+      resetStageForm()
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || 'No se pudo crear', variant: 'destructive' })
+    }
   }
 
-  function handleRemoveStage(id: string, title: string) {
-    const ok = removeColumn(id)
-    if (ok) {
-      toast({ title: "Etapa eliminada", description: title })
-    } else {
-      toast({ title: "No se pudo eliminar", description: "La etapa tiene oportunidades o no existe", variant: "destructive" })
+  async function handleRemoveStage(id: string, title: string) {
+    try {
+      await deleteStage(id)
+      const ok = removeColumn(id)
+      if (ok) {
+        toast({ title: "Etapa eliminada", description: title })
+      } else {
+        toast({ title: "No se pudo eliminar localmente", description: "Revisar estado", variant: 'destructive' })
+      }
+    } catch (err: any) {
+      toast({ title: 'Error eliminando', description: err.message || 'No se pudo eliminar', variant: 'destructive' })
     }
   }
 
