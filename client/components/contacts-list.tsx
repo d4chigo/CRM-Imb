@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Plus } from "lucide-react"
+import { Search, Plus, Download } from "lucide-react"
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 import { usePipelineDnd } from "@/hooks/use-pipeline-dnd"
 import { fetchContacts, createContact, ContactDTO } from "@/lib/contacts"
+import { getGoogleContactsAuthUrl, openGoogleImportPopup } from "@/lib/googleContacts"
+import { useToast } from '@/hooks/use-toast'
 
 // Estado interno para contactos reales
 // Se cargan desde la API al montar el componente
@@ -22,23 +24,40 @@ export function ContactsList() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { columns, addOpportunity } = usePipelineDnd()
+  const { toast } = useToast();
+
+  async function loadContacts() {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await fetchContacts()
+      setContacts(data)
+    } catch (e:any) {
+      setError(e.message || 'Error cargando contactos')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
     async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await fetchContacts()
-        if (active) setContacts(data)
-      } catch (e:any) {
-        if (active) setError(e.message || 'Error cargando contactos')
-      } finally {
-        if (active) setLoading(false)
-      }
+      if(active) await loadContacts()
     }
     load()
     return () => { active = false }
+  }, [])
+
+  // Listener para mensaje de popup de importación
+  useEffect(() => {
+    function handleMessage(ev: MessageEvent) {
+      if (ev.data && ev.data.type === 'google-import-result') {
+        toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
+        loadContacts()
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
   }, [])
 
   const filteredContacts = contacts.filter((contact) => {
@@ -115,9 +134,21 @@ export function ContactsList() {
           </h2>
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
-        <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
-          <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={async () => {
+            try {
+              const url = await getGoogleContactsAuthUrl();
+              openGoogleImportPopup(url);
+            } catch(e:any) {
+              toast({ title:'Error', description: e.message, variant:'destructive' })
+            }
+          }}>
+            <Download className="h-4 w-4 mr-2" />Importar Google
+          </Button>
+          <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
+            <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

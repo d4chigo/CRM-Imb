@@ -17,7 +17,8 @@ class GoogleContactsController {
     try {
       const oauth2Client = getOAuthClient();
       const scopes = ['https://www.googleapis.com/auth/contacts.readonly'];
-      const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent' });
+      // Utilizamos state=popup para saber que debemos devolver HTML que hace postMessage
+      const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: 'popup' });
       res.json({ success:true, url });
     } catch (e) {
       res.status(500).json({ success:false, message:e.message });
@@ -27,6 +28,7 @@ class GoogleContactsController {
   static async callback(req, res) {
     try {
       const code = req.query.code;
+      const state = req.query.state; // 'popup' si viene de flujo con ventana
       if (!code) return res.status(400).json({ success:false, message:'Código no provisto' });
       const oauth2Client = getOAuthClient();
       const { tokens } = await oauth2Client.getToken(code);
@@ -47,7 +49,21 @@ class GoogleContactsController {
         return { nombre, email, telefono, notas, origen: 'google', tipo: 'lead' };
       });
       const result = await ContactsService.bulkCreate(rows);
-      res.json({ success:true, imported: result.inserted, skipped: result.skipped, items: result.items.slice(0,50) });
+      if (state === 'popup') {
+        // Responder con HTML que manda mensaje a la ventana que abrió el popup
+        res.send(`<!doctype html><html><head><title>Importación Google</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">
+          <h3>Importación completada</h3>
+          <p>Importados: ${result.inserted} | Duplicados: ${result.skipped}</p>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} }, '*');
+              setTimeout(()=> window.close(), 800);
+            }
+          </script>
+        </body></html>`);
+      } else {
+        res.json({ success:true, imported: result.inserted, skipped: result.skipped, items: result.items.slice(0,50) });
+      }
     } catch (e) {
       console.error('Error importando contactos Google:', e.message);
       res.status(500).json({ success:false, message:e.message });
