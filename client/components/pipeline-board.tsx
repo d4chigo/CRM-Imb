@@ -25,7 +25,7 @@ import { createOpportunity } from "@/lib/opportunities"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns, addOpportunity } = usePipelineDnd()
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns, addOpportunity, setColumns } = usePipelineDnd() as any
   const { toast } = useToast()
 
   // Estado de diálogos
@@ -52,17 +52,19 @@ export function PipelineBoard() {
     fetchStages()
       .then(apiStages => {
         if (!mounted) return
-        // Reemplazar columnas iniciales solo si API trae datos
         if (apiStages.length > 0) {
-          // mapear a estructura Column
-          // Mantener oportunidades existentes vacías
-          // (en el futuro se cargarán desde API también)
-          // Usamos setColumns del hook (acceso vía hack: addColumn luego limpiar)
-          // Simpler: reconstruir directo
-          // @ts-ignore acceso a setColumns
+          // Reconstruir columnas con etapas desde API conservando oportunidades por id si coincidían
+          // (por ahora no hay persistencia de oportunidades, así que vacías)
+          // @ts-ignore setColumns exposed
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          const mapped = apiStages.map(s => ({ id: s.id, title: s.title, color: s.color, opportunities: [] }))
+          // Reemplazar sólo si difiere
+          if (JSON.stringify(mapped.map((m: any)=>m.id)) !== JSON.stringify(columns.map((c: any)=>c.id))) {
+            setColumns(mapped)
+          }
         }
       })
-      .catch(() => {})
+      .catch(()=>{})
     return () => { mounted = false }
   }, [])
 
@@ -84,7 +86,7 @@ export function PipelineBoard() {
   }
 
   async function handleRemoveStage(id: string, title: string) {
-    const col = columns.find(c => c.id === id)
+  const col = columns.find((c: any) => c.id === id)
     if (!col) return
     if (col.opportunities.length > 0) {
       const proceed = window.confirm(`La etapa "${title}" contiene ${col.opportunities.length} oportunidades. ¿Eliminar igualmente? Esta acción no elimina oportunidades, solo las dejará huérfanas hasta que agreguemos re-asignación.`)
@@ -110,7 +112,7 @@ export function PipelineBoard() {
   }
 
   function moveStage(id: string, dir: -1 | 1) {
-    const idx = columns.findIndex(c => c.id === id)
+  const idx = columns.findIndex((c: any) => c.id === id)
     if (idx < 0) return
     const target = idx + dir
     if (target < 0 || target >= columns.length) return
@@ -179,7 +181,7 @@ export function PipelineBoard() {
                   <div>
                     <h4 className="text-sm font-semibold mb-2" style={{ color: "#303030" }}>Etapas actuales</h4>
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                      {columns.map((c, index) => (
+                      {columns.map((c: any, index: number) => (
                         <div key={c.id} className="flex flex-col gap-1 rounded border bg-white px-3 py-2 text-xs">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -219,7 +221,7 @@ export function PipelineBoard() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="w-full overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
-            {filteredColumns.map((column) => (
+            {filteredColumns.map((column: any) => (
               <div key={column.id} className="w-80 flex-shrink-0">
                 <Card className="h-full shadow-sm border-2 hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3" style={{ backgroundColor: `${column.color}10` }}>
@@ -264,7 +266,7 @@ export function PipelineBoard() {
                             scrollbarColor: `${column.color} transparent`,
                           }}
                         >
-                          {column.opportunities.map((opportunity, index) => (
+                          {column.opportunities.map((opportunity: any, index: number) => (
                             <Draggable key={opportunity.id} draggableId={opportunity.id} index={index}>
                               {(provided, snapshot) => (
                                 <Card
@@ -357,7 +359,7 @@ export function PipelineBoard() {
                                         >
                                           {opportunity.agent
                                             .split(" ")
-                                            .map((n) => n[0])
+                                            .map((n: string) => n[0])
                                             .join("")}
                                         </AvatarFallback>
                                       </Avatar>

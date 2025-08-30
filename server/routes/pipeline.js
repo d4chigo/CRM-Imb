@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const PipelineStagesController = require('../controllers/pipelineStagesController');
 
 const router = express.Router();
@@ -7,13 +7,13 @@ const router = express.Router();
 // Listar etapas (auth requerida, cualquier rol activo)
 router.get('/stages', authenticateToken, PipelineStagesController.list);
 
-// Crear etapa (solo admin)
-router.post('/stages', authenticateToken, requireAdmin, PipelineStagesController.validateCreate, PipelineStagesController.create);
+// Crear etapa (cualquier usuario autenticado)
+router.post('/stages', authenticateToken, PipelineStagesController.validateCreate, PipelineStagesController.create);
 
-// Eliminar etapa (solo admin)
-router.delete('/stages/:id', authenticateToken, requireAdmin, PipelineStagesController.remove);
+// Eliminar etapa (cualquier usuario autenticado)
+router.delete('/stages/:id', authenticateToken, PipelineStagesController.remove);
 
-// Actualizar etapa (solo admin)
-router.patch('/stages/:id', authenticateToken, requireAdmin, PipelineStagesController.validateUpdate, PipelineStagesController.update);
+// Actualizar etapa (cualquier usuario autenticado)
+router.patch('/stages/:id', authenticateToken, PipelineStagesController.validateUpdate, PipelineStagesController.update);
 
 module.exports = router;
