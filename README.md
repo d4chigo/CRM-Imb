@@ -5,7 +5,7 @@ Sistema CRM completo para gestión inmobiliaria con autenticación JWT y interfa
 ## 🚀 Configuración de Desarrollo
 
 ### Prerrequisitos
-- Node.js 18+ 
+- Node.js 18+
 - pnpm
 - MySQL (XAMPP recomendado)
 - Git
@@ -24,9 +24,17 @@ cd CRM-Imb
 ```
 
 ### 2. Configurar Base de Datos
-- Iniciar XAMPP con MySQL
-- Crear base de datos `crm_imb_db`
-- Las tablas se crean automáticamente
+- Iniciar MySQL
+- Crear base de datos `crm_imb` (o usar el script `database/crm_schema.sql`)
+
+```sql
+CREATE DATABASE crm_imb CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+```
+
+Ejecutar el esquema (opcional si ya existe):
+```bash
+mysql -u root -p crm_imb < database/crm_schema.sql
+```
 
 ### 3. Configurar Backend
 ```bash
@@ -41,7 +49,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=
-DB_NAME=crm_imb_db
+DB_NAME=crm_imb
 JWT_SECRET=tu_jwt_secret_super_seguro
 JWT_REFRESH_SECRET=tu_refresh_secret_super_seguro
 FRONTEND_URL=http://localhost:3000
@@ -64,7 +72,7 @@ NEXT_PUBLIC_APP_NAME=CRM Inmobiliario
 ### Iniciar Backend
 ```bash
 cd server
-pnpm start
+pnpm dev
 ```
 
 ### Iniciar Frontend  
@@ -73,12 +81,22 @@ cd client
 pnpm dev
 ```
 
+## 🔍 Scripts Útiles
+
+Desde `server/`:
+```bash
+node scripts/checkDatabase.js   # Verifica conexión, tablas y usuarios
+pnpm run create-admin           # Crea usuario administrador inicial
+```
+
 ## 👤 Usuario Administrador por Defecto
+
+Si ejecutaste `create-admin`:
 
 **Email**: admin@crm-inmobiliario.com  
 **Contraseña**: Admin123!
 
-⚠️ **Cambiar la contraseña después del primer login**
+⚠️ Cambiar la contraseña después del primer login.
 
 ## 🔒 Características de Seguridad
 
