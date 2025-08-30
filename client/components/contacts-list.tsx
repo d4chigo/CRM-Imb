@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Phone, Mail, MapPin, Plus } from "lucide-react"
+import { Search, Plus } from "lucide-react"
+import { NewContactDialog } from "@/components/forms/NewContactDialog"
+import { usePipelineDnd } from "@/hooks/use-pipeline-dnd"
 
 // TODO: Conectar con datos reales de la base de datos
 // Datos de ejemplo eliminados - deben cargarse desde la BD
@@ -15,6 +17,8 @@ const contacts: any[] = []
 export function ContactsList() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedType, setSelectedType] = useState("all")
+  const [openNew, setOpenNew] = useState(false)
+  const { columns, addOpportunity } = usePipelineDnd()
 
   const filteredContacts = contacts.filter((contact) => {
     const matchesSearch =
@@ -67,9 +71,8 @@ export function ContactsList() {
           </h2>
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
-        <Button style={{ backgroundColor: "#FCBA00" }} className="text-white">
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Contacto
+        <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
+          <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
         </Button>
       </div>
 
@@ -150,6 +153,23 @@ export function ContactsList() {
           {/* TODO: Renderizar contactos desde la BD cuando estén disponibles */}
         </div>
       )}
+    <NewContactDialog
+      open={openNew}
+      onOpenChange={setOpenNew}
+      onSubmit={(data) => {
+        // Insertar como oportunidad inicial en etapa contacto_inicial
+        addOpportunity('contacto_inicial', {
+          clientName: data.nombre,
+          serviceName: 'N/A',
+          agent: 'Sin asignar',
+          value: 0,
+          probability: 0,
+          closeDate: new Date().toISOString().slice(0,10),
+          phone: data.telefono || '',
+          email: data.email || ''
+        })
+      }}
+    />
     </div>
   )
 }
