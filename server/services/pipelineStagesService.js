@@ -28,9 +28,8 @@ class PipelineStagesService {
   }
 
   static async remove(id) {
-    // Verificar que no existan oportunidades asociadas
-    const used = await queryOne('SELECT id FROM oportunidades WHERE etapa_id = ? LIMIT 1', [id]);
-    if (used) throw new Error('No se puede eliminar: etapa en uso');
+  // Si hay oportunidades que apuntan a esta etapa, las marcamos a null para permitir borrado
+  await executeQuery('UPDATE oportunidades SET etapa_id = NULL WHERE etapa_id = ?', [id]);
     const result = await executeQuery('DELETE FROM etapas_pipeline WHERE id = ?', [id]);
     if (result.affectedRows === 0) throw new Error('Etapa no encontrada');
     return true;

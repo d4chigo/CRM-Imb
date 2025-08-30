@@ -70,6 +70,22 @@ async function ensureSchema() {
       await conn.query(`ALTER TABLE etapas_pipeline ADD COLUMN orden INT NOT NULL DEFAULT 0 AFTER color_hex`);
       console.log('🛠️  Columna etapas_pipeline.orden añadida');
     }
+    // Semilla de etapas por defecto si la tabla está vacía
+    const [countRows] = await conn.query(`SELECT COUNT(*) AS c FROM etapas_pipeline`);
+    if (countRows[0].c === 0) {
+      const defaults = [
+        { id: 'contacto_inicial', titulo: 'Contacto Inicial', color: '#94A3B8', orden: 1 },
+        { id: 'calificacion', titulo: 'Calificación', color: '#FCBA00', orden: 2 },
+        { id: 'presentacion', titulo: 'Presentación', color: '#F59E0B', orden: 3 },
+        { id: 'negociacion', titulo: 'Negociación', color: '#EF4444', orden: 4 },
+        { id: 'propuesta', titulo: 'Propuesta', color: '#8B5CF6', orden: 5 },
+        { id: 'cierre_ganado', titulo: 'Cierre Ganado', color: '#10B981', orden: 6 },
+      ];
+      for (const d of defaults) {
+        await conn.query(`INSERT INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES (?,?,?,?)`, [d.id, d.titulo, d.color, d.orden]);
+      }
+      console.log('🌱 Etapas por defecto insertadas en etapas_pipeline');
+    }
     conn.release();
   } catch (e) {
     console.error('⚠️  Error en ensureSchema:', e.message);
