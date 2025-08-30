@@ -25,3 +25,8 @@ export async function createStage(stage: PipelineStageDTO): Promise<PipelineStag
 export async function deleteStage(id: string): Promise<void> {
   await authFetch(`/api/pipeline/stages/${id}`, { method: 'DELETE' });
 }
+
+export async function updateStage(id: string, data: Partial<PipelineStageDTO> & { order?: number }): Promise<PipelineStageDTO & { order?: number }> {
+  const res = await authFetch(`/api/pipeline/stages/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  return res.data;
+}

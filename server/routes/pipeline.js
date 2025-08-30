@@ -13,4 +13,7 @@ router.post('/stages', authenticateToken, requireAdmin, PipelineStagesController
 // Eliminar etapa (solo admin)
 router.delete('/stages/:id', authenticateToken, requireAdmin, PipelineStagesController.remove);
 
+// Actualizar etapa (solo admin)
+router.patch('/stages/:id', authenticateToken, requireAdmin, PipelineStagesController.validateUpdate, PipelineStagesController.update);
+
 module.exports = router;

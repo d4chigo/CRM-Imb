@@ -117,17 +117,28 @@ export function usePipelineDnd() {
    * Eliminar una etapa/columna por id.
    * No elimina si contiene oportunidades (forzar requiere paso adicional UI).
    */
-  function removeColumn(id: string): boolean {
+  function removeColumn(id: string, opts?: { force?: boolean }): boolean {
     let removed = false
     setColumns((prev) => {
       const col = prev.find((c) => c.id === id)
       if (!col) return prev
-      if (col.opportunities.length > 0) return prev // proteger datos
+      if (col.opportunities.length > 0 && !opts?.force) return prev // proteger datos
       removed = true
       return prev.filter((c) => c.id !== id)
     })
     return removed
   }
 
-  return { columns, setColumns, searchTerm, setSearchTerm, filteredColumns, onDragEnd, addOpportunity, addColumn, removeColumn }
+  function updateColumn(id: string, data: Partial<Pick<Column,'title'|'color'>>) {
+    setColumns(prev => prev.map(c => c.id === id ? { ...c, ...data } : c))
+  }
+
+  function reorderColumns(newOrder: string[]) {
+    setColumns(prev => {
+      const map = new Map(prev.map(c => [c.id, c]))
+      return newOrder.map(id => map.get(id)!).filter(Boolean)
+    })
+  }
+
+  return { columns, setColumns, searchTerm, setSearchTerm, filteredColumns, onDragEnd, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns }
 }

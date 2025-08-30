@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2 } from "lucide-react"
 import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
-import { fetchStages, createStage, deleteStage } from "@/lib/pipelineStages"
+import { fetchStages, createStage, deleteStage, updateStage } from "@/lib/pipelineStages"
 import { formatCurrency } from "@/lib/currency"
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn } = usePipelineDnd()
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns } = usePipelineDnd()
   const { toast } = useToast()
 
   // Estado de diálogos
@@ -83,17 +83,40 @@ export function PipelineBoard() {
   }
 
   async function handleRemoveStage(id: string, title: string) {
+    const col = columns.find(c => c.id === id)
+    if (!col) return
+    if (col.opportunities.length > 0) {
+      const proceed = window.confirm(`La etapa "${title}" contiene ${col.opportunities.length} oportunidades. ¿Eliminar igualmente? Esta acción no elimina oportunidades, solo las dejará huérfanas hasta que agreguemos re-asignación.`)
+      if (!proceed) return
+    }
     try {
       await deleteStage(id)
-      const ok = removeColumn(id)
-      if (ok) {
-        toast({ title: "Etapa eliminada", description: title })
-      } else {
-        toast({ title: "No se pudo eliminar localmente", description: "Revisar estado", variant: 'destructive' })
-      }
+      const ok = removeColumn(id, { force: true })
+      toast({ title: ok ? 'Etapa eliminada' : 'Etapa eliminada en servidor', description: title })
     } catch (err: any) {
       toast({ title: 'Error eliminando', description: err.message || 'No se pudo eliminar', variant: 'destructive' })
     }
+  }
+
+  async function handleUpdateStage(id: string, patch: { title?: string; color?: string }) {
+    try {
+      const updated = await updateStage(id, patch)
+      updateColumn(id, { title: updated.title, color: updated.color })
+      toast({ title: 'Etapa actualizada', description: updated.title })
+    } catch (e:any) {
+      toast({ title: 'Error actualizando', description: e.message || 'No se pudo actualizar', variant: 'destructive' })
+    }
+  }
+
+  function moveStage(id: string, dir: -1 | 1) {
+    const idx = columns.findIndex(c => c.id === id)
+    if (idx < 0) return
+    const target = idx + dir
+    if (target < 0 || target >= columns.length) return
+    const newOrder = [...columns]
+    const [item] = newOrder.splice(idx,1)
+    newOrder.splice(target,0,item)
+    reorderColumns(newOrder.map(c=>c.id))
   }
 
   function handleSendEmail(values: import("@/components/forms/EmailDialog").EmailFormValues) {
@@ -154,17 +177,28 @@ export function PipelineBoard() {
                   </form>
                   <div>
                     <h4 className="text-sm font-semibold mb-2" style={{ color: "#303030" }}>Etapas actuales</h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                      {columns.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between rounded border bg-white px-3 py-2 text-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
-                            <span>{c.title}</span>
-                            <Badge variant="secondary" className="text-[10px]">{c.opportunities.length}</Badge>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {columns.map((c, index) => (
+                        <div key={c.id} className="flex flex-col gap-1 rounded border bg-white px-3 py-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
+                              <input
+                                className="bg-transparent border-b border-dashed focus:outline-none focus:border-gray-400 text-xs"
+                                defaultValue={c.title}
+                                onBlur={(e)=> e.target.value !== c.title && handleUpdateStage(c.id,{ title: e.target.value })}
+                              />
+                              <Badge variant="secondary" className="text-[10px]">{c.opportunities.length}</Badge>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <input type="color" value={c.color} className="w-6 h-6 cursor-pointer" onChange={(e)=> handleUpdateStage(c.id,{ color: e.target.value })} />
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={()=> moveStage(c.id,-1)} disabled={index===0}>↑</Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={()=> moveStage(c.id,1)} disabled={index===columns.length-1}>↓</Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 hover:bg-red-50" onClick={() => handleRemoveStage(c.id, c.title)}>
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
                           </div>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-red-50" onClick={() => handleRemoveStage(c.id, c.title)} disabled={c.opportunities.length > 0}>
-                            <Trash2 className={`h-4 w-4 ${c.opportunities.length > 0 ? 'text-gray-300' : 'text-red-500'}`} />
-                          </Button>
                         </div>
                       ))}
                       {columns.length === 0 && <p className="text-xs text-gray-500">No hay etapas.</p>}
@@ -203,6 +237,10 @@ export function PipelineBoard() {
                     </div>
                     <div className="mt-2 text-xs font-semibold" style={{ color: "#303030" }}>
                       Total: {formatCurrency(calculateColumnTotal(column.opportunities))}
+                      <Button size="sm" variant="ghost" className="ml-2 h-6 px-2 text-[10px]" onClick={()=>{
+                        // Placeholder: abrir formulario de nuevo contacto (se puede importar NewContactDialog en futuro)
+                        toast({ title: 'Nuevo contacto', description: `Abrir formulario (pendiente) para etapa ${column.title}` })
+                      }}>+ contacto</Button>
                     </div>
                   </CardHeader>
                   <CardContent className="pt-0 px-3 pb-3">
