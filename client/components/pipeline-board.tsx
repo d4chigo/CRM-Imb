@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/currency"
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
 import { useToast } from "@/hooks/use-toast"
+import { createOpportunity } from "@/lib/opportunities"
 
 /**
  * Componente de tablero de pipeline de ventas.
@@ -24,7 +25,7 @@ import { useToast } from "@/hooks/use-toast"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns } = usePipelineDnd()
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns, addOpportunity } = usePipelineDnd()
   const { toast } = useToast()
 
   // Estado de diálogos
@@ -237,9 +238,13 @@ export function PipelineBoard() {
                     </div>
                     <div className="mt-2 text-xs font-semibold" style={{ color: "#303030" }}>
                       Total: {formatCurrency(calculateColumnTotal(column.opportunities))}
-                      <Button size="sm" variant="ghost" className="ml-2 h-6 px-2 text-[10px]" onClick={()=>{
-                        // Placeholder: abrir formulario de nuevo contacto (se puede importar NewContactDialog en futuro)
-                        toast({ title: 'Nuevo contacto', description: `Abrir formulario (pendiente) para etapa ${column.title}` })
+                      <Button size="sm" variant="ghost" className="ml-2 h-6 px-2 text-[10px]" onClick={async ()=>{
+                        const nombre = prompt(`Nombre del nuevo contacto / oportunidad para etapa ${column.title}`)
+                        if(!nombre) return
+                        try {
+                          const opp = await createOpportunity({ servicioId:1, etapaId: column.id, nombreCliente: nombre, valorUsd:0, probabilidad:0 })
+                          addOpportunity(column.id, { clientName: opp.nombreCliente, serviceName: 'Servicio', agent: 'Sin asignar', value: opp.valorUsd || 0, probability: opp.probabilidad || 0, closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10), phone:'', email:'' })
+                        } catch(e:any){ toast({ title:'Error', description:e.message, variant:'destructive' }) }
                       }}>+ contacto</Button>
                     </div>
                   </CardHeader>

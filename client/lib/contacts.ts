@@ -25,3 +25,17 @@ export async function deleteContact(id: number): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/contacts/${id}`, { method: 'DELETE', headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
   if (!res.ok) throw new Error('Error eliminando contacto');
 }
+
+export async function getContact(id: number): Promise<ContactDTO> {
+  const res = await fetch(`${API_BASE_URL}/api/contacts/${id}`, { headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
+  if (!res.ok) throw new Error('Error obteniendo contacto');
+  const data = await res.json();
+  return data.data;
+}
+
+export async function updateContact(id: number, patch: Partial<ContactDTO>): Promise<ContactDTO> {
+  const res = await fetch(`${API_BASE_URL}/api/contacts/${id}`, { method: 'PATCH', headers: { 'Content-Type':'application/json', ...authHeaders() } as HeadersInit, body: JSON.stringify(patch), credentials: 'include' });
+  if (!res.ok) throw new Error('Error actualizando contacto');
+  const data = await res.json();
+  return data.data;
+}

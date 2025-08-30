@@ -6,6 +6,8 @@ const router = express.Router();
 
 router.get('/', authenticateToken, ContactsController.list);
 router.post('/', authenticateToken, ContactsController.validateCreate, ContactsController.create);
+router.get('/:id', authenticateToken, ContactsController.get);
+router.patch('/:id', authenticateToken, ContactsController.validateUpdate, ContactsController.update);
 router.delete('/:id', authenticateToken, requireAdmin, ContactsController.remove);
 
 module.exports = router;
