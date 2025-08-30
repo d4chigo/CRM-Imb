@@ -6,7 +6,9 @@ const router = express.Router();
 // Obtener URL de autorización de Google
 router.get('/contacts/auth-url', authenticateToken, GoogleContactsController.authUrl);
 // Callback después de autorizar (Google redirige aquí con ?code=...)
-router.get('/contacts/callback', authenticateToken, GoogleContactsController.callback);
+// IMPORTANTE: No usamos authenticateToken aquí porque la redirección de Google NO conserva
+// el header Authorization. Si se necesita ligar al usuario, incluir un token firmado en 'state'.
+router.get('/contacts/callback', GoogleContactsController.callback);
 
 // Debug: verificar variables de entorno (solo autenticado)
 router.get('/contacts/env-check', authenticateToken, (req,res)=>{
