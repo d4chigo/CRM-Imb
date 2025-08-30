@@ -78,10 +78,15 @@ class GoogleContactsController {
           <h3>Importación completada</h3>
           <p>Importados: ${result.inserted} | Duplicados: ${result.skipped}</p>
           <script>
-            if (window.opener) {
-              window.opener.postMessage({ type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} }, '*');
-              setTimeout(()=> window.close(), 800);
-            }
+            (function(){
+              try {
+                localStorage.setItem('googleImportResult', JSON.stringify({ imported:${result.inserted}, skipped:${result.skipped}, ts: Date.now() }));
+              } catch(e) {}
+              if (window.opener) {
+                window.opener.postMessage({ type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} }, '*');
+                setTimeout(()=> window.close(), 800);
+              }
+            })();
           </script>
         </body></html>`);
       } else {

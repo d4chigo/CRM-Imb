@@ -147,15 +147,43 @@ export function ContactsList() {
         </div>
         <div className="flex gap-2">
       <Button variant="outline" onClick={async () => {
-            const popup = openGoogleImportPopup('about:blank'); // abrir antes para evitar bloqueo
+            const popup = openGoogleImportPopup('about:blank');
+            let closedWatcher: any = null;
             try {
-        setImporting(true)
+              setImporting(true)
               if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
               const url = await getGoogleContactsAuthUrl();
               if (popup) popup.location.replace(url);
               toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
+              // Polling fallback: si popup se cierra sin mensaje limpiamos overlay
+              const start = Date.now();
+              closedWatcher = setInterval(() => {
+                // Fallback: revisar localStorage por resultado almacenado
+                try {
+                  const stored = localStorage.getItem('googleImportResult');
+                  if (stored) {
+                    const data = JSON.parse(stored);
+                    if (data && data.ts && Date.now() - data.ts < 15000) {
+                      setImporting(false);
+                      toast({ title: 'Importación completada', description: `Importados: ${data.imported} | Duplicados: ${data.skipped}` });
+                      localStorage.removeItem('googleImportResult');
+                      loadContacts();
+                      clearInterval(closedWatcher);
+                      return;
+                    }
+                  }
+                } catch(_) {}
+                if (popup && popup.closed) {
+                  if (Date.now() - start > 500 && importing) {
+                    setImporting(false);
+                    toast({ title: 'Importación', description: 'Popup cerrado sin completar.', variant: 'destructive' });
+                  }
+                  clearInterval(closedWatcher);
+                }
+              }, 400);
             } catch(e:any) {
-        setImporting(false)
+              setImporting(false)
+              if (closedWatcher) clearInterval(closedWatcher);
               const msg = e?.message?.includes('401') ? 'Sesión expirada. Vuelve a iniciar sesión.' : (e.message || 'Error desconocido');
               if (popup) {
                 popup.document.open();
