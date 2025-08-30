@@ -64,28 +64,30 @@ class GoogleContactsController {
       });
       const connections = response.data.connections || [];
       const rows = connections.map(p => {
-        const nombre = p.names && p.names.length ? p.names[0].displayName : 'Sin Nombre';
+        const nombre = p.names && p.names.length ? (p.names[0].displayName || p.names[0].givenName || 'Sin Nombre') : 'Sin Nombre';
         const email = p.emailAddresses && p.emailAddresses.length ? p.emailAddresses[0].value : null;
         const telefono = p.phoneNumbers && p.phoneNumbers.length ? p.phoneNumbers[0].value : null;
         const notas = p.biographies && p.biographies.length ? p.biographies[0].value : null;
         return { nombre, email, telefono, notas, origen: 'google', tipo: 'lead' };
-      });
+      }).filter(r => r.email || r.telefono || (r.nombre && r.nombre !== 'Sin Nombre'));
+      console.log('[googleImport] Conexiones totales:', connections.length, 'Filtradas útiles:', rows.length);
       const result = await ContactsService.bulkCreate(rows);
   console.log(`[googleImport] Importación finalizada: insertados ${result.inserted}, duplicados ${result.skipped}`);
       if (state === 'popup') {
         // Responder con HTML que manda mensaje a la ventana que abrió el popup
-        res.send(`<!doctype html><html><head><title>Importación Google</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">
+        res.send(`<!doctype html><html><head><title>Importación Google</title></head><body style=\"font-family:sans-serif;text-align:center;padding:20px;\">
           <h3>Importación completada</h3>
           <p>Importados: ${result.inserted} | Duplicados: ${result.skipped}</p>
           <script>
             (function(){
-              try {
-                localStorage.setItem('googleImportResult', JSON.stringify({ imported:${result.inserted}, skipped:${result.skipped}, ts: Date.now() }));
-              } catch(e) {}
-              if (window.opener) {
-                window.opener.postMessage({ type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} }, '*');
-                setTimeout(()=> window.close(), 800);
-              }
+              try { localStorage.setItem('googleImportResult', JSON.stringify({ imported:${result.inserted}, skipped:${result.skipped}, ts: Date.now() })); } catch(e) {}
+              let attempts = 0;
+              const payload = { type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} };
+              const timer = setInterval(()=>{
+                attempts++;
+                try { if (window.opener) window.opener.postMessage(payload, '*'); } catch(e){}
+                if (attempts >= 5) { clearInterval(timer); setTimeout(()=> window.close(), 500); }
+              }, 250);
             })();
           </script>
         </body></html>`);
