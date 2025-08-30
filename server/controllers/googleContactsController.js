@@ -19,8 +19,10 @@ class GoogleContactsController {
       const scopes = ['https://www.googleapis.com/auth/contacts.readonly'];
       // Utilizamos state=popup para saber que debemos devolver HTML que hace postMessage
       const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: 'popup' });
+  console.log('[googleImport] Generada URL de autorización Google');
       res.json({ success:true, url });
     } catch (e) {
+  console.error('[googleImport] Error generando URL:', e.message);
       res.status(500).json({ success:false, message:e.message });
     }
   }
@@ -33,6 +35,7 @@ class GoogleContactsController {
       const oauth2Client = getOAuthClient();
       const { tokens } = await oauth2Client.getToken(code);
       oauth2Client.setCredentials(tokens);
+  console.log('[googleImport] Tokens recibidos, llamando People API');
       const people = google.people({ version: 'v1', auth: oauth2Client });
       // Obtener contactos (batch inicialmente 1000)
       const response = await people.people.connections.list({
@@ -49,6 +52,7 @@ class GoogleContactsController {
         return { nombre, email, telefono, notas, origen: 'google', tipo: 'lead' };
       });
       const result = await ContactsService.bulkCreate(rows);
+  console.log(`[googleImport] Importación finalizada: insertados ${result.inserted}, duplicados ${result.skipped}`);
       if (state === 'popup') {
         // Responder con HTML que manda mensaje a la ventana que abrió el popup
         res.send(`<!doctype html><html><head><title>Importación Google</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">

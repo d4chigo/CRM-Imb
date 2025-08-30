@@ -7,8 +7,14 @@ function authHeaders(): Record<string,string> {
 
 export async function getGoogleContactsAuthUrl(): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/google/contacts/auth-url`, { headers: { ...authHeaders() } });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[googleImport] fallo auth-url', res.status, text);
+    throw new Error('No se pudo obtener URL de Google');
+  }
   if (!res.ok) throw new Error('No se pudo obtener URL de Google');
   const data = await res.json();
+  console.log('[googleImport] auth-url obtenida');
   return data.url;
 }
 
