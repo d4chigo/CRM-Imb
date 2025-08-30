@@ -52,10 +52,19 @@ export function ContactsList() {
   // Listener para mensaje de popup de importación
   useEffect(() => {
   function handleMessage(ev: MessageEvent) {
-      if (ev.data && ev.data.type === 'google-import-result') {
-    setImporting(false)
-    toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
+      if (!ev.data) return;
+      if (ev.data.type === 'google-import-result') {
+        setImporting(false)
+        toast({ title: 'Importación completada', description: `Importados: ${ev.data.imported} | Duplicados: ${ev.data.skipped}` })
         loadContacts()
+      } else if (ev.data.type === 'google-import-error') {
+        setImporting(false)
+        const err = (ev.data.error || '').toString();
+        let description = ev.data.description || 'Error en autorización con Google';
+        if (err === 'access_denied') {
+          description = 'Acceso denegado. Asegúrate de que tu correo esté añadido como Test User en Google Cloud (OAuth consent screen) y vuelve a intentar.';
+        }
+        toast({ title: 'Importación cancelada', description, variant: 'destructive' });
       }
     }
     window.addEventListener('message', handleMessage)
