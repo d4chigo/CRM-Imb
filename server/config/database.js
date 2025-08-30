@@ -41,3 +41,39 @@ module.exports = {
   executeQuery,
   queryOne,
 };
+
+// Auto-migración ligera para asegurar columnas recientes (tipo, origen, notas en contactos; orden en etapas_pipeline)
+async function ensureSchema() {
+  try {
+    const conn = await pool.getConnection();
+    const dbName = config.database.database; // nombre de BD
+    // Helper para saber si existe columna
+    async function columnExists(table, column) {
+      const [rows] = await conn.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ? LIMIT 1`, [dbName, table, column]);
+      return rows.length > 0;
+    }
+    // contactos
+    if (!(await columnExists('contactos','tipo'))) {
+      await conn.query(`ALTER TABLE contactos ADD COLUMN tipo ENUM('lead','prospecto','cliente') DEFAULT 'lead' AFTER telefono`);
+      console.log('🛠️  Columna contactos.tipo añadida');
+    }
+    if (!(await columnExists('contactos','origen'))) {
+      await conn.query(`ALTER TABLE contactos ADD COLUMN origen VARCHAR(80) AFTER tipo`);
+      console.log('🛠️  Columna contactos.origen añadida');
+    }
+    if (!(await columnExists('contactos','notas'))) {
+      await conn.query(`ALTER TABLE contactos ADD COLUMN notas TEXT AFTER origen`);
+      console.log('🛠️  Columna contactos.notas añadida');
+    }
+    // etapas_pipeline
+    if (!(await columnExists('etapas_pipeline','orden'))) {
+      await conn.query(`ALTER TABLE etapas_pipeline ADD COLUMN orden INT NOT NULL DEFAULT 0 AFTER color_hex`);
+      console.log('🛠️  Columna etapas_pipeline.orden añadida');
+    }
+    conn.release();
+  } catch (e) {
+    console.error('⚠️  Error en ensureSchema:', e.message);
+  }
+}
+
+module.exports.ensureSchema = ensureSchema;

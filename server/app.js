@@ -5,7 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 const config = require('./config/config');
-const { testConnection } = require('./config/database');
+const { testConnection, ensureSchema } = require('./config/database');
 const {
   corsOptions,
   helmetOptions,
@@ -25,7 +25,7 @@ const app = express();
 app.set('port', config.port);
 
 // Probar conexión a la base de datos al inicio
-testConnection();
+testConnection().then(() => ensureSchema());
 
 /**
  * Middleware de seguridad
