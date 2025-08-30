@@ -14,7 +14,6 @@
   "license": "ISC",
   "packageManager": "pnpm@10.14.0",
   "dependencies": {
-    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -23,12 +22,11 @@
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-  "mysql2": "^3.14.3",
-  "nodemon": "^3.1.10",
-  "googleapis": "^140.0.0"
+    "mysql2": "^3.14.3",
+    "nodemon": "^3.1.10",
+    "googleapis": "^140.0.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^3.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "dotenv": "^17.2.1"
   }
