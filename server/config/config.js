@@ -11,7 +11,7 @@ if (fs.existsSync(rootEnv)) {
 
 const config = {
   // Configuración del servidor
-  port: process.env.PORT || 3001,
+  port: Number(process.env.PORT) || 4000,
   nodeEnv: process.env.NODE_ENV || 'development',
   
   // Configuración de la base de datos MySQL
@@ -47,3 +47,12 @@ const config = {
 };
 
 module.exports = config;
+
+if (process.env.NODE_ENV === 'development') {
+  console.log('[config] PORT:', config.port, 'DB_HOST:', config.database.host, 'FRONTEND_URL:', config.frontendUrl);
+  console.log('[config] GOOGLE vars presentes:', {
+    GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || null
+  });
+}
