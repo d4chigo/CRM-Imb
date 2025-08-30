@@ -1,34 +1,13 @@
 // Servicio de autenticación para el cliente
 // Maneja registro, login, logout y gestión de tokens JWT
 
-interface LoginCredentials {
-  email: string;
-  password: string;
-}
+interface LoginCredentials { email: string; password: string; }
+interface RegisterData { name: string; email: string; password: string; role?: 'admin' | 'user'; }
+interface User { id: number; nombre?: string; name?: string; email: string; rol?: string; role?: string; createdAt?: string; }
+interface AuthResponse { success: boolean; message: string; user?: User; token?: string; }
 
-interface RegisterData {
-  name: string;
-  email: string;
-  password: string;
-  role?: 'admin' | 'user';
-}
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  createdAt: string;
-}
-
-interface AuthResponse {
-  success: boolean;
-  message: string;
-  user?: User;
-  token?: string;
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// Ajuste: asegurar puerto 4000 por defecto (coincide con backend)
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 class AuthService {
   private token: string | null = null;
@@ -51,23 +30,21 @@ class AuthService {
           'Content-Type': 'application/json',
         },
         credentials: 'include', // Para incluir cookies de refresh token
-        body: JSON.stringify(userData),
+        body: JSON.stringify({ nombre: userData.name, email: userData.email, password: userData.password, rol: userData.role }),
       });
 
-      const data = await response.json();
+      const raw = await response.json();
+      const token = raw.token || raw.accessToken || raw.data?.accessToken;
+      const user = raw.user || raw.data?.user;
 
-      if (data.success && data.token) {
-        this.setToken(data.token);
-        this.setUser(data.user);
+      if (raw.success && token) {
+        this.setToken(token);
+        if (user) this.setUser(user);
       }
 
-      return data;
-    } catch (error) {
-      console.error('Error en registro:', error);
-      return {
-        success: false,
-        message: 'Error de conexión al servidor',
-      };
+      return { success: !!raw.success, message: raw.message || (raw.success ? 'Registro exitoso' : 'Error en registro'), user, token };
+    } catch {
+      return { success: false, message: 'Error de conexión al servidor' };
     }
   }
 
@@ -85,20 +62,18 @@ class AuthService {
         body: JSON.stringify(credentials),
       });
 
-      const data = await response.json();
+      const raw = await response.json();
+      const token = raw.token || raw.accessToken || raw.data?.accessToken; // backend usa data.accessToken
+      const user = raw.user || raw.data?.user;
 
-      if (data.success && data.token) {
-        this.setToken(data.token);
-        this.setUser(data.user);
+      if (raw.success && token) {
+        this.setToken(token);
+        if (user) this.setUser(user);
       }
 
-      return data;
-    } catch (error) {
-      console.error('Error en login:', error);
-      return {
-        success: false,
-        message: 'Error de conexión al servidor',
-      };
+      return { success: !!raw.success, message: raw.message || (raw.success ? 'Login exitoso' : 'Credenciales inválidas'), user, token };
+    } catch {
+      return { success: false, message: 'Error de conexión al servidor' };
     }
   }
 
@@ -114,9 +89,7 @@ class AuthService {
         },
         credentials: 'include',
       });
-    } catch (error) {
-      console.error('Error en logout:', error);
-    } finally {
+    } catch { } finally {
       this.clearAuth();
     }
   }
@@ -126,21 +99,21 @@ class AuthService {
    */
   async refreshToken(): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      const r = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
         method: 'POST',
         credentials: 'include',
       });
 
-      const data = await response.json();
+      const raw = await r.json();
+      const token = raw.token || raw.accessToken || raw.data?.accessToken;
 
-      if (data.success && data.token) {
-        this.setToken(data.token);
+      if (raw.success && token) {
+        this.setToken(token);
         return true;
       }
 
       return false;
-    } catch (error) {
-      console.error('Error al refrescar token:', error);
+    } catch {
       return false;
     }
   }
@@ -158,8 +131,8 @@ class AuthService {
   getCurrentUser(): User | null {
     if (typeof window === 'undefined') return null;
     
-    const userStr = localStorage.getItem('currentUser');
-    return userStr ? JSON.parse(userStr) : null;
+    const u = localStorage.getItem('currentUser');
+    return u ? JSON.parse(u) : null;
   }
 
   /**
@@ -181,7 +154,7 @@ class AuthService {
       
       // Si el token expira en menos de 5 minutos, considerarlo expirado
       return payload.exp < (currentTime + 300);
-    } catch (error) {
+    } catch {
       return true;
     }
   }
@@ -191,18 +164,14 @@ class AuthService {
    */
   private setToken(token: string): void {
     this.token = token;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('authToken', token);
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('authToken', token);
   }
 
   /**
    * Guardar datos del usuario
    */
   private setUser(user: User): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('currentUser', JSON.stringify(user));
-    }
+    if (typeof window !== 'undefined') localStorage.setItem('currentUser', JSON.stringify(user));
   }
 
   /**
