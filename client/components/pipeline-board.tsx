@@ -12,7 +12,6 @@ import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings
 import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
 import { fetchStages, createStage, deleteStage } from "@/lib/pipelineStages"
 import { formatCurrency } from "@/lib/currency"
-import { NewOpportunityDialog } from "@/components/forms/NewOpportunityDialog"
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
 import { useToast } from "@/hooks/use-toast"
@@ -25,11 +24,10 @@ import { useToast } from "@/hooks/use-toast"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addOpportunity, addColumn, removeColumn } = usePipelineDnd()
+  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn } = usePipelineDnd()
   const { toast } = useToast()
 
   // Estado de diálogos
-  const [openNew, setOpenNew] = React.useState(false)
   const [openEmail, setOpenEmail] = React.useState(false)
   const [openCall, setOpenCall] = React.useState(false)
   const [manageOpen, setManageOpen] = React.useState(false)
@@ -96,20 +94,6 @@ export function PipelineBoard() {
     } catch (err: any) {
       toast({ title: 'Error eliminando', description: err.message || 'No se pudo eliminar', variant: 'destructive' })
     }
-  }
-
-  function handleCreate(values: import("@/components/forms/NewOpportunityDialog").NewOpportunityFormValues) {
-    addOpportunity(values.columnId, {
-      clientName: values.clientName,
-      serviceName: values.serviceName,
-      agent: values.agent,
-      value: values.value,
-      probability: values.probability,
-      closeDate: values.closeDate,
-      phone: values.phone,
-      email: values.email,
-    })
-    toast({ title: "Oportunidad creada", description: `${values.clientName} • ${values.serviceName}` })
   }
 
   function handleSendEmail(values: import("@/components/forms/EmailDialog").EmailFormValues) {
@@ -189,9 +173,6 @@ export function PipelineBoard() {
                 </div>
               </DialogContent>
             </Dialog>
-            <Button style={{ backgroundColor: "#FCBA00" }} className="text-white hover:opacity-90" onClick={() => setOpenNew(true)}>
-              Nueva Oportunidad
-            </Button>
         </div>
       </div>
 
@@ -356,12 +337,6 @@ export function PipelineBoard() {
       </DragDropContext>
 
       {/* Diálogos */}
-      <NewOpportunityDialog
-        open={openNew}
-        onOpenChange={setOpenNew}
-        columns={columns}
-        onSubmit={handleCreate}
-      />
       <EmailDialog open={openEmail} onOpenChange={setOpenEmail} defaults={emailDefaults} onSubmit={handleSendEmail} />
       <CallDialog open={openCall} onOpenChange={setOpenCall} defaults={callDefaults} onSubmit={handleSaveCall} />
     </div>
