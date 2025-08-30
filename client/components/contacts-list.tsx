@@ -136,11 +136,16 @@ export function ContactsList() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={async () => {
+            // Abrir popup inmediatamente para evitar bloqueo del navegador
+            const popup = openGoogleImportPopup('about:blank');
             try {
               const url = await getGoogleContactsAuthUrl();
-              openGoogleImportPopup(url);
+              if (popup) popup.location.href = url;
+              toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso a tus contactos.' });
             } catch(e:any) {
-              toast({ title:'Error', description: e.message, variant:'destructive' })
+              if (popup) popup.close();
+              const msg = e?.message?.includes('401') ? 'Debes iniciar sesión' : e.message;
+              toast({ title:'Error importando', description: msg, variant:'destructive' });
             }
           }}>
             <Download className="h-4 w-4 mr-2" />Importar Google
