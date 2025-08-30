@@ -1,30 +1,51 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Plus } from "lucide-react"
-import { NewContactDialog } from "@/components/forms/NewContactDialog"
+import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 import { usePipelineDnd } from "@/hooks/use-pipeline-dnd"
+import { fetchContacts, createContact, ContactDTO } from "@/lib/contacts"
 
-// TODO: Conectar con datos reales de la base de datos
-// Datos de ejemplo eliminados - deben cargarse desde la BD
-const contacts: any[] = []
+// Estado interno para contactos reales
+// Se cargan desde la API al montar el componente
 
 export function ContactsList() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedType, setSelectedType] = useState("all")
   const [openNew, setOpenNew] = useState(false)
+  const [contacts, setContacts] = useState<ContactDTO[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { columns, addOpportunity } = usePipelineDnd()
 
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const data = await fetchContacts()
+        if (active) setContacts(data)
+      } catch (e:any) {
+        if (active) setError(e.message || 'Error cargando contactos')
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [])
+
   const filteredContacts = contacts.filter((contact) => {
-    const matchesSearch =
-      contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      contact.email.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesType = selectedType === "all" || contact.type === selectedType
+    const nombre = (contact.nombre || '').toLowerCase()
+    const email = (contact.email || '').toLowerCase()
+    const matchesSearch = nombre.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase())
+    const matchesType = selectedType === "all" || (contact.tipo || 'lead') === selectedType
     return matchesSearch && matchesType
   })
 
@@ -60,6 +81,29 @@ export function ContactsList() {
       currency: "PEN", // Cambiado de USD a PEN (Nuevo Sol Peruano)
       minimumFractionDigits: 0,
     }).format(amount)
+  }
+
+  async function handleCreateContact(data: NewContactFormValues) {
+    const created = await createContact({
+      nombre: data.nombre,
+      email: data.email,
+      telefono: data.telefono,
+      tipo: data.tipo,
+      origen: data.origen,
+      notas: data.notas
+    })
+    setContacts(prev => [created, ...prev])
+    // Insertar como oportunidad inicial en etapa contacto_inicial (solo UI por ahora)
+    addOpportunity('contacto_inicial', {
+      clientName: created.nombre,
+      serviceName: 'N/A',
+      agent: 'Sin asignar',
+      value: 0,
+      probability: 0,
+      closeDate: new Date().toISOString().slice(0,10),
+      phone: created.telefono || '',
+      email: created.email || ''
+    })
   }
 
   return (
@@ -134,7 +178,11 @@ export function ContactsList() {
       </Card>
 
       {/* Contacts Grid */}
-      {filteredContacts.length === 0 ? (
+      {loading ? (
+        <Card><CardContent className="p-8 text-center"><p className="text-gray-500">Cargando contactos...</p></CardContent></Card>
+      ) : error ? (
+        <Card><CardContent className="p-8 text-center"><p className="text-red-500">{error}</p></CardContent></Card>
+      ) : filteredContacts.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <p className="text-gray-500">
@@ -150,25 +198,24 @@ export function ContactsList() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* TODO: Renderizar contactos desde la BD cuando estén disponibles */}
+          {filteredContacts.map(c => (
+            <Card key={c.id} className="border border-gray-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between text-base font-semibold">
+                  <span>{c.nombre}</span>
+                  <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
+                </CardTitle>
+                <CardDescription className="text-xs text-gray-500">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
+              </CardHeader>
+              {c.notas && <CardContent className="pt-0 text-xs text-gray-600 whitespace-pre-line">{c.notas}</CardContent>}
+            </Card>
+          ))}
         </div>
       )}
     <NewContactDialog
       open={openNew}
       onOpenChange={setOpenNew}
-      onSubmit={(data) => {
-        // Insertar como oportunidad inicial en etapa contacto_inicial
-        addOpportunity('contacto_inicial', {
-          clientName: data.nombre,
-          serviceName: 'N/A',
-          agent: 'Sin asignar',
-          value: 0,
-          probability: 0,
-          closeDate: new Date().toISOString().slice(0,10),
-          phone: data.telefono || '',
-          email: data.email || ''
-        })
-      }}
+      onSubmit={handleCreateContact}
     />
     </div>
   )
