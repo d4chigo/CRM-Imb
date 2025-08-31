@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS `contactos` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `nombre_completo` VARCHAR(120) NOT NULL,
   `email` VARCHAR(160),
-  `telefono` VARCHAR(40) UNIQUE,
+  `telefono` VARCHAR(40),
   `tipo` ENUM('lead','prospecto','cliente') DEFAULT 'lead',
   `origen` VARCHAR(80),
   `notas` TEXT,
-  `creado_en` DATETIME NOT NULL UNIQUE DEFAULT CURRENT_TIMESTAMP,
+  `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -138,4 +138,4 @@ INSERT IGNORE INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES
 -- Insertar usuario admin único si no existe (password: admin123 - debe cambiarse luego)
 -- Hash generado con bcrypt cost 10 para 'admin123'
 INSERT IGNORE INTO usuarios (id, nombre_completo, email, password_hash, rol) VALUES
-(1, 'Administrador', 'admin@crm-imb.com', '$2b$10$8Yp4ZJx1syI7Ssqw9kM6iO2mymQ0TsQpmgx9m.AVXni4eWh05rqR2', 'admin');
+(1, 'Administrador', 'admin@crm-imb.com', '$2b$10$tiuedvIrkDD6omK1INYf/umEfpP58cXEN3F4fnjmGkgVCfuMUIIOW', 'admin');
