@@ -1,9 +1,12 @@
 const { app, BrowserWindow } = require('electron/main')
 
+const path = require('path')
+
 const createWindow = () => {
   const win = new BrowserWindow({
     width: 1280,
-    height: 720
+    height: 720,
+    icon: path.join(__dirname, '..', 'client', 'public', 'imb_logo.png') // icono de la app
   })
 
   win.loadURL('http://localhost:3000')
