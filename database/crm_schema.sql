@@ -1,11 +1,11 @@
--- Esquema de base de datos CRM-Imb (MySQL 8+)
+-- Esquema de base de datos CRM-Imb (MySQL 5.7+)
 -- Contiene únicamente definición de tablas, claves foráneas e índices.
 -- No incluye datos de ejemplo ni sentencias INSERT.
 
 -- Crear y seleccionar la base de datos
 CREATE DATABASE IF NOT EXISTS `crm_imb`
   CHARACTER SET utf8mb4
-  COLLATE utf8mb4_0900_ai_ci;
+  COLLATE utf8mb4_unicode_ci;
 USE `crm_imb`;
 
 -- Tabla de usuarios del sistema (agentes, supervisores, administradores)
@@ -135,6 +135,7 @@ INSERT IGNORE INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES
 ('negociacion', 'Negociación', '#EF4444', 4),
 ('cierre', 'Cierre', '#10B981', 5);
 
--- Insertar un agente básico si no existe
-INSERT IGNORE INTO agentes (id, nombre_completo, email, telefono) VALUES
-(1, 'Agente Predeterminado', 'agente@crm-imb.com', '+51999999999');
+-- Insertar usuario admin único si no existe (password: admin123 - debe cambiarse luego)
+-- Hash generado con bcrypt cost 10 para 'admin123'
+INSERT IGNORE INTO usuarios (id, nombre_completo, email, password_hash, rol) VALUES
+(1, 'Administrador', 'admin@crm-imb.com', '$2b$10$8Yp4ZJx1syI7Ssqw9kM6iO2mymQ0TsQpmgx9m.AVXni4eWh05rqR2', 'admin');
