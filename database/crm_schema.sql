@@ -115,3 +115,26 @@ CREATE TABLE IF NOT EXISTS `actividades` (
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_act_oportunidad` FOREIGN KEY (`oportunidad_id`) REFERENCES `oportunidades`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =================================================================
+-- DATOS BÁSICOS NECESARIOS
+-- =================================================================
+
+-- Insertar servicios básicos si no existen
+INSERT IGNORE INTO servicios (id, nombre, descripcion) VALUES
+(1, 'Compra/Venta', 'Servicios de compra y venta de propiedades'),
+(2, 'Crédito Hipotecario', 'Asesoría en créditos hipotecarios'),
+(3, 'Programa VIP', 'Programa especializado para clientes VIP'),
+(4, 'Consultoría', 'Servicios de consultoría inmobiliaria');
+
+-- Insertar etapas del pipeline si no existen
+INSERT IGNORE INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES
+('contacto_inicial', 'Contacto Inicial', '#94A3B8', 1),
+('calificacion', 'Calificación', '#F59E0B', 2), 
+('presentacion', 'Presentación', '#3B82F6', 3),
+('negociacion', 'Negociación', '#EF4444', 4),
+('cierre', 'Cierre', '#10B981', 5);
+
+-- Insertar un agente básico si no existe
+INSERT IGNORE INTO agentes (id, nombre_completo, email, telefono) VALUES
+(1, 'Agente Predeterminado', 'agente@crm-imb.com', '+51999999999');

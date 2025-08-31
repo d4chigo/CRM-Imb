@@ -6,7 +6,20 @@ class OpportunitiesService {
     return await executeQuery(`SELECT id, contacto_id AS contactoId, agente_id AS agenteId, servicio_id AS servicioId, etapa_id AS etapaId, nombre_cliente AS nombreCliente, valor_usd AS valorUsd, probabilidad, fecha_cierre AS fechaCierre, telefono, email, creado_en, actualizado_en FROM oportunidades ORDER BY creado_en DESC`);
   }
   static async create({ contactoId, agenteId, servicioId, etapaId, nombreCliente, valorUsd = 0, probabilidad = 0, fechaCierre, telefono, email }) {
-    const result = await executeQuery(`INSERT INTO oportunidades (contacto_id, agente_id, servicio_id, etapa_id, nombre_cliente, valor_usd, probabilidad, fecha_cierre, telefono, email) VALUES (?,?,?,?,?,?,?,?,?,?)`, [contactoId || null, agenteId || null, servicioId, etapaId, nombreCliente, valorUsd, probabilidad, fechaCierre, telefono, email]);
+    // Convertir undefined a null para evitar error "Bind parameters must not contain undefined"
+    const params = [
+      contactoId || null,
+      agenteId || null, 
+      servicioId,
+      etapaId,
+      nombreCliente,
+      valorUsd || 0,
+      probabilidad || 0,
+      fechaCierre || null,
+      telefono || null,
+      email || null
+    ];
+    const result = await executeQuery(`INSERT INTO oportunidades (contacto_id, agente_id, servicio_id, etapa_id, nombre_cliente, valor_usd, probabilidad, fecha_cierre, telefono, email) VALUES (?,?,?,?,?,?,?,?,?,?)`, params);
     return { id: result.insertId, contactoId, agenteId, servicioId, etapaId, nombreCliente, valorUsd, probabilidad, fechaCierre, telefono, email };
   }
   static async get(id) {
