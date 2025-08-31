@@ -8,47 +8,50 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Building2, Users, TrendingUp, Calendar, DollarSign, User, LogOut } from "lucide-react"
 import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
+import { PipelineProvider } from '@/contexts/PipelineContext'
+import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
 import { PropertiesList } from "@/components/properties-list"
+import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 
-export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState("pipeline")
+function DashboardInner() {
+  const { activeTab, setActiveTab } = useDashboardTabs()
+  const { user, logout } = useAuth()
+  
+  // Proteger ruta - redirigir a login si no está autenticado
+  const { isAuthenticated, loading } = useRequireAuth()
 
-  const handleLogout = () => {
-    window.location.href = "/"
+  const handleLogout = async () => {
+    try {
+      await logout()
+      window.location.href = "/login"
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error)
+    }
   }
 
-  const stats = [
-    {
-      title: "Contactos Activos",
-      value: "247",
-      change: "+12%",
-      icon: Users,
-      color: "#FCBA00",
-    },
-    {
-      title: "Oportunidades",
-      value: "89",
-      change: "+8%",
-      icon: TrendingUp,
-      color: "#FCBA00",
-    },
-    {
-      title: "Propiedades",
-      value: "156",
-      change: "+5%",
-      icon: Building2,
-      color: "#FCBA00",
-    },
-    {
-      title: "Ventas del Mes",
-      value: "$2.4M",
-      change: "+15%",
-      icon: DollarSign,
-      color: "#FCBA00",
-    },
-  ]
+  // Mostrar loading mientras se verifica autenticación
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-2 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Si no está autenticado, no mostrar contenido (useRequireAuth redirigirá)
+  if (!isAuthenticated) {
+    return null
+  }
+
+  // TODO: Conectar con datos reales de la base de datos
+  // Estadísticas eliminadas - deben venir de la BD
+  // const stats = []
 
   return (
+    <PipelineProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="border-b bg-white">
@@ -67,8 +70,10 @@ export default function Dashboard() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <User className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium">Juan Pérez</span>
-              <Badge variant="secondary">Agente</Badge>
+              <span className="text-sm font-medium">{user?.name || 'Usuario'}</span>
+              <Badge variant="secondary">
+                {user?.role === 'admin' ? 'Administrador' : 'Agente'}
+              </Badge>
             </div>
             <Button
               variant="outline"
@@ -84,36 +89,15 @@ export default function Dashboard() {
       </header>
 
       <div className="p-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold" style={{ color: "#303030" }}>
-                      {stat.value}
-                    </p>
-                    <p className="text-sm" style={{ color: stat.color }}>
-                      {stat.change} vs mes anterior
-                    </p>
-                  </div>
-                  <div className="p-3 rounded-full" style={{ backgroundColor: `${stat.color}20` }}>
-                    <stat.icon className="h-6 w-6" style={{ color: stat.color }} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* TODO: Stats Cards - Conectar con datos reales de la BD */}
+        {/* Sección de estadísticas eliminada - debe implementarse con datos de la base de datos */}
 
         {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+  <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="pipeline">Pipeline de Ventas</TabsTrigger>
             <TabsTrigger value="contacts">Contactos</TabsTrigger>
-            <TabsTrigger value="properties">Propiedades</TabsTrigger>
+            <TabsTrigger value="properties">Servicios</TabsTrigger>
             <TabsTrigger value="activities">Actividades</TabsTrigger>
           </TabsList>
 
@@ -136,25 +120,31 @@ export default function Dashboard() {
                 <CardDescription>Próximas reuniones y seguimientos</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {[1, 2, 3].map((item) => (
-                    <div key={item} className="flex items-center space-x-4 p-4 border rounded-lg">
-                      <div className="p-2 rounded-full" style={{ backgroundColor: "#FCBA0020" }}>
-                        <Calendar className="h-4 w-4" style={{ color: "#FCBA00" }} />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">Reunión con cliente - María García</p>
-                        <p className="text-sm text-gray-500">Hoy 15:30 - Presentación Residencial Los Pinos</p>
-                      </div>
-                      <Badge variant="outline">Pendiente</Badge>
-                    </div>
-                  ))}
+                {/* TODO: Conectar con datos reales de la base de datos */}
+                <div className="p-8 text-center">
+                  <p className="text-gray-500">
+                    Las actividades deben cargarse desde la base de datos.
+                  </p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Implementar conexión con API de actividades
+                  </p>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+  </div>
+  </PipelineProvider>
+  )
+}
+
+export default function Dashboard() {
+  return (
+    <DashboardTabsProvider>
+      <PipelineProvider>
+        <DashboardInner />
+      </PipelineProvider>
+    </DashboardTabsProvider>
   )
 }
