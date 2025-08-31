@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Lock, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
@@ -45,72 +46,64 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">
-            Iniciar Sesión
-          </CardTitle>
-          <CardDescription className="text-center">
-            Ingresa tu email y contraseña para acceder
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="tu@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Tu contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </div>
-            
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={isLoading}
-            >
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              ¿No tienes una cuenta?{' '}
-              <Link 
-                href="/register" 
-                className="font-medium text-blue-600 hover:text-blue-500"
-              >
-                Regístrate aquí
-              </Link>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Lado izquierdo branding */}
+      <div className="md:w-1/2 flex flex-col justify-center p-10 text-white relative overflow-hidden" style={{ backgroundColor: '#FCBA00' }}>
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, #ffffff 0, transparent 60%)' }} />
+        <div className="relative max-w-md">
+          <h1 className="text-4xl font-extrabold mb-4 leading-tight drop-shadow-sm">CRM Inmobiliario</h1>
+          <p className="text-white/90 text-lg mb-8">Gestiona contactos, oportunidades y tu pipeline de ventas en un solo lugar.</p>
+          <ul className="space-y-3 text-sm text-white/90">
+            <li className="flex items-start gap-2"><span className="mt-1 inline-block w-2 h-2 rounded-full bg-white" /> Importa contactos desde Google</li>
+            <li className="flex items-start gap-2"><span className="mt-1 inline-block w-2 h-2 rounded-full bg-white" /> Arrastra y suelta oportunidades en el pipeline</li>
+            <li className="flex items-start gap-2"><span className="mt-1 inline-block w-2 h-2 rounded-full bg-white" /> Crea oportunidades desde la lista de contactos</li>
+          </ul>
+          <div className="mt-10 text-xs text-white/70">© {new Date().getFullYear()} CRM-Imb</div>
+        </div>
+      </div>
+      {/* Lado derecho formulario */}
+      <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-gray-50">
+        <Card className="w-full max-w-md shadow-lg border border-gray-200">
+          <CardHeader className="space-y-1 pb-4">
+            <CardTitle className="text-2xl font-bold flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full" style={{ backgroundColor: '#FCBA00' }}>
+                <Lock className="h-5 w-5 text-white" />
+              </span>
+              Acceso
+            </CardTitle>
+            <CardDescription>Ingresa tus credenciales para continuar</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input id="email" type="email" className="pl-9" placeholder="admin@crm-imb.com" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={isLoading} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <div className="relative">
+                  <Lock className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input id="password" type="password" className="pl-9" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading} />
+                </div>
+              </div>
+              <Button type="submit" disabled={isLoading} className="w-full font-semibold text-gray-900 hover:opacity-90 transition" style={{ backgroundColor: '#FCBA00' }}>
+                {isLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Validando...</> : 'Iniciar Sesión'}
+              </Button>
+              <div className="text-center text-sm text-gray-600">
+                ¿No tienes cuenta?{' '}<Link href="/register" className="font-medium text-gray-900 hover:underline" style={{ color: '#b77900' }}>Regístrate</Link>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </div>
-  );
+  )
 }
