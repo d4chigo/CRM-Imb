@@ -6,12 +6,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Plus, Download } from "lucide-react"
+import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow } from "lucide-react"
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
-import { usePipelineDnd } from "@/hooks/use-pipeline-dnd"
-import { fetchContacts, createContact, ContactDTO } from "@/lib/contacts"
+// Nuevo dialog para edición
+import { EditContactDialog, EditContactFormValues } from '@/components/forms/EditContactDialog'
+// Reemplazamos uso de hook local por contexto global del pipeline
+import { usePipeline } from '@/contexts/PipelineContext'
+import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO } from "@/lib/contacts"
+import { createOpportunityFromContact } from '@/lib/opportunities'
+import { useAuth } from '@/contexts/AuthContext'
 import { getGoogleContactsAuthUrl, openGoogleImportPopup } from "@/lib/googleContacts"
 import { useToast } from '@/hooks/use-toast'
+import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
 
 // Estado interno para contactos reales
 // Se cargan desde la API al montar el componente
@@ -21,6 +27,10 @@ export function ContactsList() {
   const [selectedType, setSelectedType] = useState("all")
   const [openNew, setOpenNew] = useState(false)
   const [contacts, setContacts] = useState<ContactDTO[]>([])
+  // Estado para edición
+  const [editOpen, setEditOpen] = useState(false)
+  const [contactEditing, setContactEditing] = useState<ContactDTO | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,8 +71,10 @@ export function ContactsList() {
     } catch(_) {}
     return false
   }
-  const { columns, addOpportunity } = usePipelineDnd()
+  const { addOpportunity } = usePipeline()
+  const { setActiveTab } = useDashboardTabs()
   const { toast } = useToast();
+  const { user, hasRole } = useAuth();
 
   async function loadContacts() {
     setLoading(true)
@@ -176,6 +188,47 @@ export function ContactsList() {
       phone: created.telefono || '',
       email: created.email || ''
     })
+  }
+
+  // --- Manejo edición ---
+  async function handleUpdateContact(id: number, data: EditContactFormValues) {
+    try {
+      const updated = await updateContact(id, data)
+      // Actualizamos estado local sin refetch completo
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updated } : c))
+    } catch(e:any) {
+      toast({ title: 'Error', description: e.message || 'No se pudo actualizar', variant: 'destructive' })
+      throw e
+    }
+  }
+
+  // --- Manejo eliminación ---
+  async function handleDeleteContact(id: number) {
+    // Mono-usuario: no validamos rol, backend ya no exige admin
+    const confirmed = window.confirm('¿Eliminar este contacto? Esta acción no se puede deshacer.')
+    if (!confirmed) return
+    setDeletingId(id)
+    try {
+      await deleteContact(id)
+      setContacts(prev => prev.filter(c => c.id !== id))
+      toast({ title: 'Contacto eliminado' })
+    } catch(e:any) {
+      // Parsear formato mensaje|STATUS:### si existe
+      let raw = e.message || ''
+      let status: string | null = null
+      const statusMatch = raw.match(/\|STATUS:(\d{3})$/)
+      if (statusMatch) {
+        status = statusMatch[1]
+        raw = raw.replace(/\|STATUS:\d{3}$/,'')
+      }
+      let finalMsg = raw
+      if (status === '403') finalMsg = 'No autorizado para eliminar'
+      else if (status === '409' || /oportunidades/i.test(raw)) finalMsg = 'No se puede eliminar: contacto ligado a oportunidades'
+      if (!finalMsg) finalMsg = 'Error eliminando'
+      toast({ title: 'Error', description: finalMsg, variant: 'destructive' })
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   return (
@@ -318,11 +371,57 @@ export function ContactsList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredContacts.map(c => (
-            <Card key={c.id} className="border border-gray-200">
+            <Card key={c.id} className="border border-gray-200 group">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center justify-between text-base font-semibold">
-                  <span>{c.nombre}</span>
-                  <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
+                  <span className="truncate" title={c.nombre}>{c.nombre}</span>
+                  <div className="flex items-center gap-2">
+                    <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
+                    <div className="opacity-0 group-hover:opacity-100 transition flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      {/* Crear oportunidad en pipeline (persistente en backend) */}
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" onClick={async () => {
+                        try {
+                          // Primero persistimos en backend como oportunidad
+                          const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
+                          // Luego reflejamos en UI local (etapa contacto_inicial)
+              console.log('[Pipeline] creando oportunidad desde contacto', opp)
+                          addOpportunity('contacto_inicial', {
+                            id: String(opp.id), // usar id backend para permitir persistir movimientos
+                            clientName: opp.nombreCliente || c.nombre,
+                            serviceName: 'Servicio',
+                            agent: 'Sin asignar',
+                            value: opp.valorUsd || 0,
+                            probability: opp.probabilidad || 0,
+                            closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10),
+                            phone: opp.telefono || c.telefono || '',
+                            email: opp.email || c.email || ''
+                          })
+                          toast({ title: 'Oportunidad creada', description: c.nombre })
+                          // Cambiar automáticamente a la pestaña pipeline para mostrar la nueva oportunidad
+                          setActiveTab('pipeline')
+                          console.log('[Pipeline] estado añadido, navegando a pipeline')
+                        } catch(e:any) {
+                          let msg = e.message || 'No se pudo crear oportunidad'
+                          const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
+                          let status = ''
+                          if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/,'') }
+                          if (status === '401') msg = 'Sesión expirada o no autenticado'
+                          if (status === '403') msg = 'Sin permisos para crear oportunidades'
+                          toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
+                          console.error('[Pipeline] error creando oportunidad', status, e)
+                        }
+                      }}>
+                        <Workflow className="h-4 w-4" />
+                      </Button>
+                      {/* Botón de eliminar visible para todos; el backend restringe a admin y el handler muestra mensaje si no tiene permisos */}
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
+                        {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
               </CardHeader>
@@ -335,6 +434,14 @@ export function ContactsList() {
       open={openNew}
       onOpenChange={setOpenNew}
       onSubmit={handleCreateContact}
+    />
+    <EditContactDialog
+      open={editOpen}
+      contact={contactEditing}
+      onOpenChange={(v) => { setEditOpen(v); if(!v) setContactEditing(null) }}
+      onSubmit={async (id, data) => {
+        await handleUpdateContact(id, data)
+      }}
     />
     {importing && (
       <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">

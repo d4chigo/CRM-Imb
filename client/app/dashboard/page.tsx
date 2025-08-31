@@ -8,11 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Building2, Users, TrendingUp, Calendar, DollarSign, User, LogOut } from "lucide-react"
 import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
+import { PipelineProvider } from '@/contexts/PipelineContext'
+import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
 import { PropertiesList } from "@/components/properties-list"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 
-export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState("pipeline")
+function DashboardInner() {
+  const { activeTab, setActiveTab } = useDashboardTabs()
   const { user, logout } = useAuth()
   
   // Proteger ruta - redirigir a login si no está autenticado
@@ -49,6 +51,7 @@ export default function Dashboard() {
   // const stats = []
 
   return (
+    <PipelineProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="border-b bg-white">
@@ -90,7 +93,7 @@ export default function Dashboard() {
         {/* Sección de estadísticas eliminada - debe implementarse con datos de la base de datos */}
 
         {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+  <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="pipeline">Pipeline de Ventas</TabsTrigger>
             <TabsTrigger value="contacts">Contactos</TabsTrigger>
@@ -131,6 +134,17 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+  </div>
+  </PipelineProvider>
+  )
+}
+
+export default function Dashboard() {
+  return (
+    <DashboardTabsProvider>
+      <PipelineProvider>
+        <DashboardInner />
+      </PipelineProvider>
+    </DashboardTabsProvider>
   )
 }

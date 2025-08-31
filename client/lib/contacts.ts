@@ -23,7 +23,18 @@ export async function createContact(contact: ContactDTO): Promise<ContactDTO> {
 
 export async function deleteContact(id: number): Promise<void> {
   const res = await fetch(`${API_BASE_URL}/api/contacts/${id}`, { method: 'DELETE', headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
-  if (!res.ok) throw new Error('Error eliminando contacto');
+  if (!res.ok) {
+    let serverMsg = ''
+    try {
+      const data = await res.json();
+      serverMsg = data?.message || ''
+    } catch(_) {
+      try { serverMsg = await res.text(); } catch(_) {}
+    }
+    const base = serverMsg || 'Error eliminando contacto'
+    // Adjuntamos código para que la UI lo pueda detectar de forma simple
+    throw new Error(`${base}|STATUS:${res.status}`)
+  }
 }
 
 export async function getContact(id: number): Promise<ContactDTO> {

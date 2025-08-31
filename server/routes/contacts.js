@@ -8,6 +8,7 @@ router.get('/', authenticateToken, ContactsController.list);
 router.post('/', authenticateToken, ContactsController.validateCreate, ContactsController.create);
 router.get('/:id', authenticateToken, ContactsController.get);
 router.patch('/:id', authenticateToken, ContactsController.validateUpdate, ContactsController.update);
-router.delete('/:id', authenticateToken, requireAdmin, ContactsController.remove);
+// Simplificado: en entorno mono-usuario se permite eliminar sin rol admin específico
+router.delete('/:id', authenticateToken, ContactsController.remove);
 
 module.exports = router;

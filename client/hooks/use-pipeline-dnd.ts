@@ -7,6 +7,16 @@
 import { useMemo, useState } from "react"
 import type { Column, Opportunity } from "@/types/pipeline"
 import { initialColumns } from "@/data/pipeline"
+
+// Orden canónico de etapas para mantener consistencia visual
+export const canonicalStageOrder = [
+  'contacto_inicial',
+  'calificacion',
+  'presentacion',
+  'negociacion',
+  'propuesta',
+  'cierre_ganado'
+]
 import type { DropResult } from "@hello-pangea/dnd"
 
 /**
@@ -140,5 +150,5 @@ export function usePipelineDnd() {
     })
   }
 
-  return { columns, setColumns, searchTerm, setSearchTerm, filteredColumns, onDragEnd, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns }
+  return { columns, setColumns, searchTerm, setSearchTerm, filteredColumns, onDragEnd, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns, canonicalStageOrder }
 }

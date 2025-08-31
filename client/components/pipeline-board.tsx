@@ -9,13 +9,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2 } from "lucide-react"
-import { usePipelineDnd, calculateColumnTotal } from "@/hooks/use-pipeline-dnd"
+// Ahora el estado se obtiene del PipelineContext global
+import { calculateColumnTotal, canonicalStageOrder } from "@/hooks/use-pipeline-dnd"
+import { usePipeline } from '@/contexts/PipelineContext'
 import { fetchStages, createStage, deleteStage, updateStage } from "@/lib/pipelineStages"
 import { formatCurrency } from "@/lib/currency"
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
 import { useToast } from "@/hooks/use-toast"
-import { createOpportunity } from "@/lib/opportunities"
+import { createOpportunity, listOpportunities, updateOpportunity } from "@/lib/opportunities" // añadimos updateOpportunity para persistir movimientos
 
 /**
  * Componente de tablero de pipeline de ventas.
@@ -25,7 +27,13 @@ import { createOpportunity } from "@/lib/opportunities"
  */
 
 export function PipelineBoard() {
-  const { searchTerm, setSearchTerm, filteredColumns, onDragEnd, columns, addColumn, removeColumn, updateColumn, reorderColumns, addOpportunity, setColumns } = usePipelineDnd() as any
+  const { columns, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns, setColumns } = usePipeline() as any
+  const [searchTerm, setSearchTerm] = React.useState("")
+  // Filtrado local (equivalente al hook anterior)
+  const filteredColumns = React.useMemo(() => {
+    if (!searchTerm) return columns
+    return columns.map((c:any) => ({ ...c, opportunities: c.opportunities.filter((o:any) => o.clientName.toLowerCase().includes(searchTerm.toLowerCase()) || o.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) || o.agent.toLowerCase().includes(searchTerm.toLowerCase())) }))
+  }, [columns, searchTerm])
   const { toast } = useToast()
 
   // Estado de diálogos
@@ -44,27 +52,8 @@ export function PipelineBoard() {
     setStageColor("#6366F1")
   }
 
-  // Cargar etapas desde API al montar
-  useEffect(() => {
-    let mounted = true
-    fetchStages()
-      .then(apiStages => {
-        if (!mounted) return
-        if (apiStages.length > 0) {
-          // Reconstruir columnas con etapas desde API conservando oportunidades por id si coincidían
-          // (por ahora no hay persistencia de oportunidades, así que vacías)
-          // @ts-ignore setColumns exposed
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          const mapped = apiStages.map(s => ({ id: s.id, title: s.title, color: s.color, opportunities: [] }))
-          // Reemplazar sólo si difiere
-          if (JSON.stringify(mapped.map((m: any)=>m.id)) !== JSON.stringify(columns.map((c: any)=>c.id))) {
-            setColumns(mapped)
-          }
-        }
-      })
-      .catch(()=>{})
-    return () => { mounted = false }
-  }, [])
+  // Hidratación eliminada: ahora la hace PipelineProvider global
+  // Esto evita que se sobrescriba el estado cuando se añaden oportunidades desde Contactos.
 
   async function handleAddStage(e: React.FormEvent) {
     e.preventDefault()
@@ -211,7 +200,46 @@ export function PipelineBoard() {
         <Input placeholder="Buscar por cliente, servicio o agente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragEnd={async (result) => {
+        const { destination, source, draggableId } = result
+        const from = source?.droppableId
+        const to = destination?.droppableId
+        if (!destination || !from || !to) return
+        if (from === to && source.index === destination.index) return
+        // Reordenar en la misma columna
+        setColumns((prev:any) => {
+          const draft = [...prev]
+          const srcCol = draft.find(c => c.id === from)
+          const dstCol = draft.find(c => c.id === to)
+          if (!srcCol || !dstCol) return prev
+          if (srcCol === dstCol) {
+            const list = [...srcCol.opportunities]
+            const [item] = list.splice(source.index,1)
+            if (!item) return prev
+            list.splice(destination.index,0,item)
+            return draft.map(c => c.id === srcCol.id ? { ...c, opportunities: list } : c)
+          } else {
+            const srcList = [...srcCol.opportunities]
+            const [item] = srcList.splice(source.index,1)
+            if (!item) return prev
+            const dstList = [...dstCol.opportunities]
+            dstList.splice(destination.index,0,item)
+            return draft.map(c => {
+              if (c.id === srcCol.id) return { ...c, opportunities: srcList }
+              if (c.id === dstCol.id) return { ...c, opportunities: dstList }
+              return c
+            })
+          }
+        })
+        // Persistencia etapa
+        if (from !== to) {
+          const numericId = Number(draggableId)
+          if (!Number.isNaN(numericId)) {
+            try { await updateOpportunity(numericId, { etapaId: to }) }
+            catch(e:any){ toast({ title:'No se pudo guardar movimiento', description: e.message || 'Error persistiendo etapa', variant:'destructive' }) }
+          }
+        }
+      }}>
         <div className="w-full overflow-x-auto pb-4">
           <div className="flex gap-4 min-w-max">
             {filteredColumns.map((column: any) => (
@@ -238,7 +266,8 @@ export function PipelineBoard() {
                         if(!nombre) return
                         try {
                           const opp = await createOpportunity({ servicioId:1, etapaId: column.id, nombreCliente: nombre, valorUsd:0, probabilidad:0 })
-                          addOpportunity(column.id, { clientName: opp.nombreCliente, serviceName: 'Servicio', agent: 'Sin asignar', value: opp.valorUsd || 0, probability: opp.probabilidad || 0, closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10), phone:'', email:'' })
+                          // Usar id real numérico como string para permitir persistencia de DnD
+                          addOpportunity(column.id, { id: String(opp.id), clientName: opp.nombreCliente, serviceName: 'Servicio', agent: 'Sin asignar', value: opp.valorUsd || 0, probability: opp.probabilidad || 0, closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10), phone:'', email:'' })
                         } catch(e:any){ toast({ title:'Error', description:e.message, variant:'destructive' }) }
                       }}>+ contacto</Button>
                     </div>
