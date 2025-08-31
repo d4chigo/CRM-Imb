@@ -44,11 +44,11 @@ CREATE TABLE IF NOT EXISTS `contactos` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `nombre_completo` VARCHAR(120) NOT NULL,
   `email` VARCHAR(160),
-  `telefono` VARCHAR(40),
+  `telefono` VARCHAR(40) UNIQUE,
   `tipo` ENUM('lead','prospecto','cliente') DEFAULT 'lead',
   `origen` VARCHAR(80),
   `notas` TEXT,
-  `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `creado_en` DATETIME NOT NULL UNIQUE DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
