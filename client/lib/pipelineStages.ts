@@ -17,8 +17,10 @@ export async function fetchStages(): Promise<PipelineStageDTO[]> {
   return data.data || [];
 }
 
-export async function createStage(stage: PipelineStageDTO): Promise<PipelineStageDTO> {
-  const data = await authFetch('/api/pipeline/stages', { method: 'POST', body: JSON.stringify(stage) });
+export async function createStage(stage: Partial<PipelineStageDTO> & { title: string; color: string }): Promise<PipelineStageDTO> {
+  const payload: any = { title: stage.title, color: stage.color };
+  if (stage.id) payload.id = stage.id; // solo incluir si se proporciona
+  const data = await authFetch('/api/pipeline/stages', { method: 'POST', body: JSON.stringify(payload) });
   return data.data;
 }
 

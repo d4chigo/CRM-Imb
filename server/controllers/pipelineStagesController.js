@@ -3,7 +3,11 @@ const PipelineStagesService = require('../services/pipelineStagesService');
 
 class PipelineStagesController {
   static validateCreate = [
-    body('id').optional().isString().trim().isLength({ min: 2, max: 64 }).matches(/^[a-z0-9_]+$/).withMessage('ID inválido'),
+    // Permitir omitir id o enviarlo vacío: se generará un slug automáticamente
+    body('id')
+      .optional({ checkFalsy: true })
+      .customSanitizer(v => v === '' ? undefined : v)
+      .isString().trim().isLength({ min: 2, max: 64 }).matches(/^[a-z0-9_]+$/).withMessage('ID inválido'),
     body('title').isString().trim().isLength({ min: 2, max: 80 }).withMessage('Título inválido'),
     body('color').isString().matches(/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/).withMessage('Color hex inválido')
   ];

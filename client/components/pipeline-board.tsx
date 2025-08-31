@@ -62,7 +62,7 @@ export function PipelineBoard() {
       return
     }
     try {
-      const created = await createStage({ id: '', title: stageTitle.trim(), color: stageColor })
+  const created = await createStage({ title: stageTitle.trim(), color: stageColor })
       addColumn({ id: created.id, title: created.title, color: created.color })
       toast({ title: "Etapa agregada", description: `${stageTitle}` })
       resetStageForm()
