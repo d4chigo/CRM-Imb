@@ -390,7 +390,7 @@ export function ContactsList() {
                   <span className="truncate" title={c.nombre}>{c.nombre}</span>
                   <div className="flex items-center gap-2">
                     <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-                    <div className="opacity-0 group-hover:opacity-100 transition flex gap-1">
+                    <div className="flex gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
                         <Pencil className="h-4 w-4" />
                       </Button>
