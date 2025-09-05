@@ -37,6 +37,7 @@ export function ContactsList() {
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [lastImport, setLastImport] = useState<{ imported: number; skipped: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Refs para manejo robusto del popup y watchers
   const popupRef = useRef<Window | null>(null)
@@ -53,6 +54,7 @@ export function ContactsList() {
     clearWatchers()
   try { popupRef.current?.close() } catch(_) {}
   popupRef.current = null
+  setLastImport({ imported, skipped })
     toast({ title: 'Importación completada', description: `Importados: ${imported} | Duplicados: ${skipped}` })
   // Refrescar a la primera página para ver lo nuevo
   loadContacts({ page: 1 })
@@ -241,8 +243,8 @@ export function ContactsList() {
           </h2>
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
-  <div className="flex gap-2">
-      <Button variant="outline" onClick={async () => {
+  <div className="flex gap-2 items-center">
+      <Button variant="outline" disabled={importing} onClick={async () => {
             if (importing) return;
             const popup = openGoogleImportPopup('about:blank');
             popupRef.current = popup;
@@ -285,8 +287,14 @@ export function ContactsList() {
               }
             }
           }}>
-            <Download className="h-4 w-4 mr-2" />Importar Google
+            {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            {importing ? 'Importando…' : 'Importar Google'}
           </Button>
+          {lastImport && (
+            <span className="text-xs text-gray-500">
+              Última importación: +{lastImport.imported} · duplicados {lastImport.skipped}
+            </span>
+          )}
           <Button variant="outline" onClick={async ()=>{
             try {
               const groups = await listDuplicateContacts()
