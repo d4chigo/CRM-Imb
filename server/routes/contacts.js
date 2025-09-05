@@ -11,4 +11,8 @@ router.patch('/:id', authenticateToken, ContactsController.validateUpdate, Conta
 // Simplificado: en entorno mono-usuario se permite eliminar sin rol admin específico
 router.delete('/:id', authenticateToken, ContactsController.remove);
 
+// Duplicados y merge
+router.get('/utils/duplicates', authenticateToken, ContactsController.duplicates);
+router.post('/utils/merge', authenticateToken, ContactsController.validateMerge, ContactsController.merge);
+
 module.exports = router;

@@ -7,11 +7,18 @@ function authHeaders(): Record<string,string> {
 
 export interface ContactDTO { id?: number; nombre: string; email?: string; telefono?: string; tipo?: string; origen?: string; notas?: string; creado_en?: string; }
 
-export async function fetchContacts(): Promise<ContactDTO[]> {
-  const res = await fetch(`${API_BASE_URL}/api/contacts`, { headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
+export interface ContactsPage { data: ContactDTO[]; meta: { page: number; pageSize: number; total: number } }
+export async function fetchContacts(params?: { page?: number; pageSize?: number; search?: string; type?: string }): Promise<ContactsPage> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  if (params?.search) q.set('search', params.search);
+  if (params?.type && params.type !== 'all') q.set('type', params.type);
+  const url = `${API_BASE_URL}/api/contacts${q.toString() ? `?${q.toString()}` : ''}`;
+  const res = await fetch(url, { headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
   if (!res.ok) throw new Error('Error listando contactos');
   const data = await res.json();
-  return data.data || [];
+  return { data: data.data || [], meta: data.meta || { page: 1, pageSize: (params?.pageSize || 20), total: (data.data?.length || 0) } };
 }
 
 export async function createContact(contact: ContactDTO): Promise<ContactDTO> {
@@ -49,4 +56,21 @@ export async function updateContact(id: number, patch: Partial<ContactDTO>): Pro
   if (!res.ok) throw new Error('Error actualizando contacto');
   const data = await res.json();
   return data.data;
+}
+
+// Duplicates API
+export interface DuplicateGroup { by: 'email'|'telefono'; value: string; count: number; members: Array<Pick<ContactDTO,'id'|'nombre'|'email'|'telefono'|'creado_en'>> }
+export async function listDuplicateContacts(by: Array<'email'|'telefono'> = ['email','telefono']): Promise<DuplicateGroup[]> {
+  const q = new URLSearchParams();
+  q.set('by', by.join(','));
+  const res = await fetch(`${API_BASE_URL}/api/contacts/utils/duplicates?${q.toString()}`, { headers: { ...authHeaders() } as HeadersInit, credentials: 'include' });
+  if (!res.ok) throw new Error('Error listando duplicados');
+  const data = await res.json();
+  return data.data || [];
+}
+export async function mergeContacts(primaryId: number, duplicateId: number, strategy: 'prefer-primary'|'prefer-filled' = 'prefer-filled') {
+  const res = await fetch(`${API_BASE_URL}/api/contacts/utils/merge`, { method: 'POST', headers: { 'Content-Type':'application/json', ...authHeaders() } as HeadersInit, body: JSON.stringify({ primaryId, duplicateId, strategy }), credentials: 'include' });
+  if (!res.ok) throw new Error('Error fusionando contactos');
+  const data = await res.json();
+  return data.data as ContactDTO;
 }

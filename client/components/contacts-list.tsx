@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow } from "lucide-react"
+import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge } from "lucide-react"
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 // Nuevo dialog para edición
 import { EditContactDialog, EditContactFormValues } from '@/components/forms/EditContactDialog'
 // Reemplazamos uso de hook local por contexto global del pipeline
 import { usePipeline } from '@/contexts/PipelineContext'
-import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO } from "@/lib/contacts"
+import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO, listDuplicateContacts, mergeContacts } from "@/lib/contacts"
 import { createOpportunityFromContact } from '@/lib/opportunities'
 import { useAuth } from '@/contexts/AuthContext'
 import { getGoogleContactsAuthUrl, openGoogleImportPopup } from "@/lib/googleContacts"
@@ -27,6 +27,10 @@ export function ContactsList() {
   const [selectedType, setSelectedType] = useState("all")
   const [openNew, setOpenNew] = useState(false)
   const [contacts, setContacts] = useState<ContactDTO[]>([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(12)
+  const [total, setTotal] = useState(0)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   // Estado para edición
   const [editOpen, setEditOpen] = useState(false)
   const [contactEditing, setContactEditing] = useState<ContactDTO | null>(null)
@@ -76,12 +80,13 @@ export function ContactsList() {
   const { toast } = useToast();
   const { user, hasRole } = useAuth();
 
-  async function loadContacts() {
+  async function loadContacts(next?: { page?: number; search?: string; type?: string }) {
     setLoading(true)
     setError(null)
     try {
-      const data = await fetchContacts()
+      const { data, meta } = await fetchContacts({ page: next?.page ?? page, pageSize, search: next?.search ?? searchTerm, type: next?.type ?? selectedType })
       setContacts(data)
+      setTotal(meta?.total || data.length)
     } catch (e:any) {
       setError(e.message || 'Error cargando contactos')
     } finally {
@@ -89,14 +94,10 @@ export function ContactsList() {
     }
   }
 
-  useEffect(() => {
-    let active = true
-    async function load() {
-      if(active) await loadContacts()
-    }
-    load()
-    return () => { active = false }
-  }, [])
+  useEffect(() => { loadContacts({ page: 1 }) }, [])
+  useEffect(() => { const t = setTimeout(()=> loadContacts({ page: 1, search: searchTerm }), 250); return ()=> clearTimeout(t) }, [searchTerm])
+  useEffect(() => { loadContacts({ page: 1, type: selectedType }) }, [selectedType])
+  useEffect(() => { loadContacts({ page }) }, [page])
 
   // Listener para mensaje de popup de importación
   useEffect(() => {
@@ -125,13 +126,7 @@ export function ContactsList() {
     return () => window.removeEventListener('message', handleMessage)
   }, [])
 
-  const filteredContacts = contacts.filter((contact) => {
-    const nombre = (contact.nombre || '').toLowerCase()
-    const email = (contact.email || '').toLowerCase()
-    const matchesSearch = nombre.includes(searchTerm.toLowerCase()) || email.includes(searchTerm.toLowerCase())
-    const matchesType = selectedType === "all" || (contact.tipo || 'lead') === selectedType
-    return matchesSearch && matchesType
-  })
+  const filteredContacts = contacts
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -240,7 +235,7 @@ export function ContactsList() {
           </h2>
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
-        <div className="flex gap-2">
+  <div className="flex gap-2">
       <Button variant="outline" onClick={async () => {
             if (importing) return;
             const popup = openGoogleImportPopup('about:blank');
@@ -285,6 +280,23 @@ export function ContactsList() {
             }
           }}>
             <Download className="h-4 w-4 mr-2" />Importar Google
+          </Button>
+          <Button variant="outline" onClick={async ()=>{
+            try {
+              const groups = await listDuplicateContacts()
+              if (!groups.length) { toast({ title:'Duplicados', description:'No se encontraron duplicados' }); return }
+              const g = groups[0]
+              const [primary, ...dups] = g.members
+              const proceed = window.confirm(`Se encontraron duplicados por ${g.by}: ${g.value}\nFusionar el más antiguo con ${dups.length} duplicado(s)?`)
+              if (!proceed) return
+              for (const d of dups) { await mergeContacts(primary.id!, d.id!) }
+              toast({ title:'Fusión completada', description:`Grupo ${g.by}: ${g.value}` })
+              loadContacts({ page: 1 })
+            } catch(e:any) {
+              toast({ title:'Error', description: e.message || 'No se pudo obtener duplicados', variant:'destructive' })
+            }
+          }}>
+            <Merge className="h-4 w-4 mr-2" />Duplicados
           </Button>
           <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
             <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
@@ -369,6 +381,7 @@ export function ContactsList() {
           </CardContent>
         </Card>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredContacts.map(c => (
             <Card key={c.id} className="border border-gray-200 group">
@@ -380,6 +393,26 @@ export function ContactsList() {
                     <div className="opacity-0 group-hover:opacity-100 transition flex gap-1">
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
                         <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
+                        const phone = (c.telefono || '').replace(/\D/g,'')
+                        if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
+                        const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
+                        const url = `https://wa.me/${phone}?text=${msg}`
+                        window.open(url, '_blank')
+                      }}>
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
+                        const title = encodeURIComponent(`Llamada con ${c.nombre}`)
+                        const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
+                        const start = new Date(Date.now() + 60*60*1000)
+                        const end = new Date(start.getTime() + 30*60*1000)
+                        const fmt = (d:Date)=> d.toISOString().replace(/[-:]|\..*/g,'')
+                        const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
+                        window.open(url, '_blank')
+                      }}>
+                        <CalendarIcon className="h-4 w-4" />
                       </Button>
                       {/* Crear oportunidad en pipeline (persistente en backend) */}
             <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" onClick={async () => {
@@ -428,7 +461,15 @@ export function ContactsList() {
               {c.notas && <CardContent className="pt-0 text-xs text-gray-600 whitespace-pre-line">{c.notas}</CardContent>}
             </Card>
           ))}
+  </div>
+  <div className="flex items-center justify-between mt-4">
+          <div className="text-xs text-gray-600">Página {page} de {totalPages} · {total} contacto(s)</div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={page<=1} onClick={()=> setPage(p => Math.max(1, p-1))}>Anterior</Button>
+            <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={()=> setPage(p => Math.min(totalPages, p+1))}>Siguiente</Button>
+          </div>
         </div>
+  </>
       )}
     <NewContactDialog
       open={openNew}

@@ -17,7 +17,7 @@ import { formatCurrency } from "@/lib/currency"
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
 import { useToast } from "@/hooks/use-toast"
-import { createOpportunity, listOpportunities, updateOpportunity } from "@/lib/opportunities" // añadimos updateOpportunity para persistir movimientos
+import { createOpportunity, listOpportunities, updateOpportunity, deleteOpportunity } from "@/lib/opportunities" // añadimos updateOpportunity para persistir movimientos
 
 /**
  * Componente de tablero de pipeline de ventas.
@@ -27,7 +27,7 @@ import { createOpportunity, listOpportunities, updateOpportunity } from "@/lib/o
  */
 
 export function PipelineBoard() {
-  const { columns, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns, setColumns } = usePipeline() as any
+  const { columns, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns, setColumns, removeOpportunityLocal } = usePipeline() as any
   const [searchTerm, setSearchTerm] = React.useState("")
   // Filtrado local (equivalente al hook anterior)
   const filteredColumns = React.useMemo(() => {
@@ -372,6 +372,27 @@ export function PipelineBoard() {
                                           }}
                                         >
                                           <Mail className="h-3 w-3 text-gray-500" />
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 hover:bg-gray-100"
+                                          onClick={async () => {
+                                            const confirmed = window.confirm('¿Eliminar esta oportunidad? Esta acción no se puede deshacer.')
+                                            if (!confirmed) return
+                                            const numId = Number(opportunity.id)
+                                            try {
+                                              if (!Number.isNaN(numId)) {
+                                                await deleteOpportunity(numId)
+                                              }
+                                              removeOpportunityLocal(String(opportunity.id))
+                                              toast({ title: 'Oportunidad eliminada', description: opportunity.clientName })
+                                            } catch (e:any) {
+                                              toast({ title: 'Error eliminando', description: e.message || 'No se pudo eliminar', variant: 'destructive' })
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="h-3 w-3 text-red-500" />
                                         </Button>
                                       </div>
                                       <Avatar className="h-7 w-7">

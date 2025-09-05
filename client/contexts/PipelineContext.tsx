@@ -15,6 +15,7 @@ interface PipelineContextValue {
   columns: Column[];
   addOpportunity: (columnId: string, opportunity: Omit<Opportunity,'id'> & Partial<Pick<Opportunity,'id'>>) => void;
   updateOpportunityLocal: (id: string, patch: Partial<Opportunity>) => void;
+  removeOpportunityLocal: (id: string) => void;
   moveOpportunityLocal: (fromCol: string, toCol: string, indexFrom: number, indexTo: number) => void;
   reorderWithinColumn: (colId: string, from: number, to: number) => void;
   reorderColumns: (order: string[]) => void;
@@ -89,6 +90,13 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
     setColumns(prev => prev.map(col => ({ ...col, opportunities: col.opportunities.map(o => o.id === id ? { ...o, ...patch } : o) })));
   }, []);
 
+  const removeOpportunityLocal = useCallback((id: string) => {
+    setColumns(prev => prev.map(col => ({
+      ...col,
+      opportunities: col.opportunities.filter(o => o.id !== id)
+    })));
+  }, []);
+
   const moveOpportunityLocal = useCallback((fromCol: string, toCol: string, indexFrom: number, indexTo: number) => {
     setColumns(prev => {
       const source = prev.find(c => c.id === fromCol);
@@ -148,6 +156,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
     columns,
     addOpportunity,
     updateOpportunityLocal,
+    removeOpportunityLocal,
     moveOpportunityLocal,
     reorderWithinColumn,
     reorderColumns,
@@ -155,7 +164,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
     removeColumn,
     updateColumn,
     setColumns
-  }), [columns, addOpportunity, updateOpportunityLocal, moveOpportunityLocal, reorderWithinColumn, reorderColumns, addColumn, removeColumn, updateColumn]);
+  }), [columns, addOpportunity, updateOpportunityLocal, removeOpportunityLocal, moveOpportunityLocal, reorderWithinColumn, reorderColumns, addColumn, removeColumn, updateColumn]);
 
   return <PipelineContext.Provider value={value}>{children}</PipelineContext.Provider>;
 }

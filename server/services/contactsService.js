@@ -4,6 +4,22 @@ class ContactsService {
   static async list() {
     return await executeQuery('SELECT id, nombre_completo AS nombre, email, telefono, tipo, origen, notas, creado_en FROM contactos ORDER BY creado_en DESC');
   }
+  static async listPaged({ page = 1, pageSize = 20, search = '', type = '' } = {}) {
+    const offset = (page - 1) * pageSize;
+    const where = [];
+    const params = [];
+    if (search) {
+      where.push('(LOWER(nombre_completo) LIKE ? OR LOWER(email) LIKE ? OR telefono LIKE ?)');
+      const like = `%${search.toLowerCase()}%`;
+      params.push(like, like, `%${search}%`);
+    }
+    if (type) { where.push('tipo = ?'); params.push(type); }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const rows = await executeQuery(`SELECT id, nombre_completo AS nombre, email, telefono, tipo, origen, notas, creado_en FROM contactos ${whereSql} ORDER BY creado_en DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
+    const totalRow = await executeQuery(`SELECT COUNT(1) AS cnt FROM contactos ${whereSql}`, params);
+    const total = totalRow?.[0]?.cnt || 0;
+    return { rows, total };
+  }
   static async create({ nombre, email, telefono, tipo = 'lead', origen, notas }) {
     const result = await executeQuery('INSERT INTO contactos (nombre_completo, email, telefono, tipo, origen, notas) VALUES (?,?,?,?,?,?)', [nombre, email, telefono, tipo, origen, notas]);
     return { id: result.insertId, nombre, email, telefono, tipo, origen, notas };
@@ -88,6 +104,49 @@ class ContactsService {
     const res = await executeQuery('DELETE FROM contactos WHERE id = ?', [id]);
     if (res.affectedRows === 0) throw new Error('Contacto no encontrado');
     return true;
+  }
+
+  // Find duplicate groups by columns (email/telefono)
+  static async findDuplicates({ by = ['email','telefono'] } = {}) {
+    const cols = by.filter(c => ['email','telefono'].includes(c));
+    if (!cols.length) throw new Error('Criterio inválido');
+    const groups = [];
+    for (const col of cols) {
+      const dupValues = await executeQuery(`SELECT ${col} AS v, COUNT(1) AS c FROM contactos WHERE ${col} IS NOT NULL AND ${col} <> '' GROUP BY ${col} HAVING COUNT(1) > 1 ORDER BY c DESC`);
+      for (const dv of dupValues) {
+        const members = await executeQuery(`SELECT id, nombre_completo AS nombre, email, telefono, creado_en FROM contactos WHERE ${col} = ? ORDER BY creado_en ASC`, [dv.v]);
+        groups.push({ by: col, value: dv.v, count: dv.c, members });
+      }
+    }
+    return groups;
+  }
+
+  // Merge duplicate into primary: move oportunidades, keep best data per strategy, delete duplicate
+  static async mergeContacts(primaryId, duplicateId, { strategy = 'prefer-filled' } = {}) {
+    if (primaryId === duplicateId) throw new Error('IDs no pueden ser iguales');
+    const primary = await this.get(primaryId);
+    const duplicate = await this.get(duplicateId);
+    if (!primary || !duplicate) throw new Error('Contacto no encontrado');
+    // Reasignar oportunidades
+    await executeQuery('UPDATE oportunidades SET contacto_id = ? WHERE contacto_id = ?', [primaryId, duplicateId]);
+    // Construir campos a actualizar según estrategia
+    const choose = (p, d) => {
+      if (strategy === 'prefer-primary') return p ?? d;
+      // prefer-filled: si d está más completo, úsalo
+      return (p && String(p).trim() !== '') ? p : d;
+    };
+    const merged = {
+      nombre: choose(primary.nombre, duplicate.nombre),
+      email: choose(primary.email, duplicate.email),
+      telefono: choose(primary.telefono, duplicate.telefono),
+      tipo: choose(primary.tipo, duplicate.tipo),
+      origen: choose(primary.origen, duplicate.origen),
+      notas: choose(primary.notas, duplicate.notas)
+    };
+    await this.update(primaryId, merged);
+    // Eliminar duplicado
+    await executeQuery('DELETE FROM contactos WHERE id = ?', [duplicateId]);
+    return await this.get(primaryId);
   }
 }
 module.exports = ContactsService;
