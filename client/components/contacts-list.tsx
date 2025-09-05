@@ -51,14 +51,17 @@ export function ContactsList() {
   function finalizeImport(imported:number, skipped:number) {
     setImporting(false)
     clearWatchers()
-    popupRef.current = null
+  try { popupRef.current?.close() } catch(_) {}
+  popupRef.current = null
     toast({ title: 'Importación completada', description: `Importados: ${imported} | Duplicados: ${skipped}` })
-    loadContacts()
+  // Refrescar a la primera página para ver lo nuevo
+  loadContacts({ page: 1 })
   }
   function failImport(msg:string) {
     setImporting(false)
     clearWatchers()
-    popupRef.current = null
+  try { popupRef.current?.close() } catch(_) {}
+  popupRef.current = null
     toast({ title: 'Importación', description: msg, variant: 'destructive' })
   }
   function checkLocalStorageFallback() {
@@ -101,8 +104,7 @@ export function ContactsList() {
 
   // Listener para mensaje de popup de importación
   useEffect(() => {
-
-  function handleMessage(ev: MessageEvent) {
+    function handleMessage(ev: MessageEvent) {
       if (!ev.data) return;
       if (ev.data.type === 'google-import-result') {
         finalizeImport(ev.data.imported, ev.data.skipped)
@@ -123,7 +125,11 @@ export function ContactsList() {
       }
     }
     window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+      window.removeEventListener('focus', onFocus)
+      clearWatchers()
+    }
   }, [])
 
   const filteredContacts = contacts
