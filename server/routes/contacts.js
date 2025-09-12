@@ -15,4 +15,8 @@ router.delete('/:id', authenticateToken, ContactsController.remove);
 router.get('/utils/duplicates', authenticateToken, ContactsController.duplicates);
 router.post('/utils/merge', authenticateToken, ContactsController.validateMerge, ContactsController.merge);
 
+// Operaciones masivas
+router.post('/utils/bulk-tag', authenticateToken, ContactsController.bulkTag);
+router.post('/utils/bulk-move-pipeline', authenticateToken, ContactsController.bulkMoveToPipeline);
+
 module.exports = router;

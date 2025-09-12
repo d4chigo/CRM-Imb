@@ -20,6 +20,7 @@ const pipelineRoutes = require('./routes/pipeline');
 const contactsRoutes = require('./routes/contacts');
 const opportunitiesRoutes = require('./routes/opportunities');
 const googleRoutes = require('./routes/google');
+const statsRoutes = require('./routes/stats');
 
 const app = express();
 
@@ -69,6 +70,7 @@ app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api/opportunities', opportunitiesRoutes);
 app.use('/api/google', googleRoutes);
+app.use('/api/stats', statsRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {
