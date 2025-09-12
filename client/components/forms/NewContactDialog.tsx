@@ -45,11 +45,7 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
       toast({ title: 'Nombre requerido', variant: 'destructive' });
       return;
     }
-    // Validar etiqueta única u 'otros' (solo si showOther está activo o no hay selección)
-    if (!(form.etiquetas && form.etiquetas.length === 1) && !((showOther) && (form.etiqueta_otro && form.etiqueta_otro.trim()))) {
-      toast({ title: 'Selecciona una etiqueta o especifica "Otros"', variant: 'destructive' });
-      return;
-    }
+    // Ya no forzamos etiqueta/otros: los campos de etiqueta son opcionales.
     setLoading(true);
     try {
       await Promise.resolve(onSubmit(form));
