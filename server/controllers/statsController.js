@@ -1,4 +1,9 @@
 const { executeQuery } = require('../config/database');
+
+async function resolveContactsTable() {
+  try { await executeQuery('SELECT 1 FROM contacto LIMIT 1'); return 'contacto'; } catch(_) {}
+  return 'contactos';
+}
 const { inferSexByName } = require('../services/genderService');
 
 // Utilidad para parsear rangos de edad desde query string: "25-30,35-40"
@@ -22,8 +27,9 @@ function parseRanges(rangesStr) {
 class StatsController {
   static async contactsByDepartment(req, res) {
     try {
+      const table = await resolveContactsTable();
       const baseSql = `SELECT departamento AS label, COUNT(*) AS count
-         FROM contactos
+         FROM ${table}
          WHERE departamento IS NOT NULL AND departamento <> ''
          GROUP BY departamento
          ORDER BY count DESC`;
@@ -43,8 +49,9 @@ class StatsController {
 
   static async contactsBySex(req, res) {
     try {
+      const table = await resolveContactsTable();
       const baseSql = `SELECT COALESCE(sexo, 'ND') AS label, COUNT(*) AS count
-         FROM contactos
+         FROM ${table}
          GROUP BY sexo
          ORDER BY count DESC`;
       let rows;
@@ -69,9 +76,10 @@ class StatsController {
 
   static async contactsByAgeRanges(req, res) {
     try {
+      const table = await resolveContactsTable();
       const ages = await executeQuery(
         `SELECT TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE()) AS edad
-         FROM contactos
+         FROM ${table}
          WHERE fecha_nacimiento IS NOT NULL`
       );
       let buckets;
@@ -93,7 +101,7 @@ class StatsController {
 
       // Contar nulos por separado
       const nullCountRows = await executeQuery(
-        `SELECT COUNT(*) AS c FROM contactos WHERE fecha_nacimiento IS NULL`
+        `SELECT COUNT(*) AS c FROM ${table} WHERE fecha_nacimiento IS NULL`
       );
       const sinDato = nullCountRows[0]?.c || 0;
 
