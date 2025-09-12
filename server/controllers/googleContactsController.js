@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const ContactsService = require('../services/contactsService');
+const { executeQuery } = require('../config/database');
 
 // Nota: Para una implementación productiva, guarda tokens por usuario en BD.
 // Aquí usamos almacenamiento en memoria del proceso como paso intermedio.
@@ -25,8 +26,10 @@ class GoogleContactsController {
         'https://www.googleapis.com/auth/contacts'
       ];
 
-      // Utilizamos state=popup para saber que debemos devolver HTML que hace postMessage
-      const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: 'popup' });
+      // Incluir el id de usuario en state para persistir tokens en callback
+      const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
+      const statePayload = encodeURIComponent(JSON.stringify({ popup: true, uid: userId }));
+      const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: statePayload });
   console.log('[googleImport] Generada URL de autorización Google');
       res.json({ success:true, url });
     } catch (e) {
@@ -57,12 +60,30 @@ class GoogleContactsController {
         return res.status(400).json({ success:false, error, description: error_description });
       }
       const code = req.query.code;
-      const state = req.query.state; // 'popup' si viene de flujo con ventana
+      const stateRaw = req.query.state; // JSON con { popup, uid }
+      let state = { popup: false, uid: null };
+      try { if (stateRaw) state = JSON.parse(decodeURIComponent(stateRaw)); } catch(_) {}
       if (!code) return res.status(400).json({ success:false, message:'Código no provisto' });
       const oauth2Client = getOAuthClient();
       const { tokens } = await oauth2Client.getToken(code);
       oauth2Client.setCredentials(tokens);
       savedTokens = tokens; // guardar en memoria para usos posteriores (crear contacto)
+
+      // Persistir tokens por usuario si state.uid válido
+      try {
+        if (state && state.uid) {
+          await executeQuery('UPDATE usuario SET google_access_token = ?, google_refresh_token = COALESCE(?, google_refresh_token), google_scope = ?, google_expiry = ? WHERE id = ?', [
+            tokens.access_token || null,
+            tokens.refresh_token || null,
+            tokens.scope || null,
+            tokens.expiry_date || null,
+            state.uid
+          ]);
+          console.log('[googleImport] Tokens persistidos para usuario', state.uid);
+        }
+      } catch(err) {
+        console.warn('[googleImport] No se pudo persistir tokens:', err.message);
+      }
 
   console.log('[googleImport] Tokens recibidos, llamando People API');
       const people = google.people({ version: 'v1', auth: oauth2Client });
@@ -117,9 +138,21 @@ module.exports = GoogleContactsController;
 module.exports.createGoogleContact = async function(req, res) {
   try {
     const { nombre, apellido, email, telefono } = req.body || {};
-    if (!savedTokens) return res.status(401).json({ success:false, message:'No conectado a Google. Autoriza primero.' });
+    const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
+    // Recuperar tokens del usuario
+    let row = null;
+    if (userId) {
+      const rows = await executeQuery('SELECT google_access_token, google_refresh_token, google_expiry FROM usuario WHERE id = ? LIMIT 1', [userId]);
+      row = rows && rows[0] ? rows[0] : null;
+    }
     const oauth2Client = getOAuthClient();
-    oauth2Client.setCredentials(savedTokens);
+    if (row && (row.google_access_token || row.google_refresh_token)) {
+      oauth2Client.setCredentials({ access_token: row.google_access_token || undefined, refresh_token: row.google_refresh_token || undefined, expiry_date: row.google_expiry || undefined });
+    } else if (savedTokens) {
+      oauth2Client.setCredentials(savedTokens);
+    } else {
+      return res.status(401).json({ success:false, message:'No conectado a Google. Autoriza primero.' });
+    }
     const people = google.people({ version: 'v1', auth: oauth2Client });
     const resource = {
       names: [{ givenName: nombre || '', familyName: apellido || '' }],
@@ -127,6 +160,13 @@ module.exports.createGoogleContact = async function(req, res) {
       phoneNumbers: telefono ? [{ value: telefono }] : undefined,
     };
     const resp = await people.people.createContact({ requestBody: resource });
+    // Si el client refrescó access token, guardar nuevo token/expiry si se encuentran en credenciales
+    try {
+      const creds = oauth2Client.credentials || {};
+      if (userId && (creds.access_token || creds.expiry_date)) {
+        await executeQuery('UPDATE usuario SET google_access_token = COALESCE(?, google_access_token), google_expiry = COALESCE(?, google_expiry) WHERE id = ?', [creds.access_token || null, creds.expiry_date || null, userId]);
+      }
+    } catch(_) {}
     return res.json({ success:true, data: { resourceName: resp.data.resourceName || null } });
   } catch(e) {
     return res.status(400).json({ success:false, message: e.message });

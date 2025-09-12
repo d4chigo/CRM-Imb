@@ -52,6 +52,27 @@ async function ensureSchema() {
       const [rows] = await conn.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ? LIMIT 1`, [dbName, table, column]);
       return rows.length > 0;
     }
+
+    // --- OAuth tokens persistentes por usuario (Google Contacts) ---
+    if (await tableExists('usuario')) {
+      const usuarioTable = 'usuario';
+      if (!(await columnExists(usuarioTable,'google_access_token'))) {
+        await conn.query(`ALTER TABLE ${usuarioTable} ADD COLUMN google_access_token TEXT NULL`);
+        console.log('🛠️  Columna usuario.google_access_token añadida');
+      }
+      if (!(await columnExists(usuarioTable,'google_refresh_token'))) {
+        await conn.query(`ALTER TABLE ${usuarioTable} ADD COLUMN google_refresh_token TEXT NULL`);
+        console.log('🛠️  Columna usuario.google_refresh_token añadida');
+      }
+      if (!(await columnExists(usuarioTable,'google_scope'))) {
+        await conn.query(`ALTER TABLE ${usuarioTable} ADD COLUMN google_scope TEXT NULL`);
+        console.log('🛠️  Columna usuario.google_scope añadida');
+      }
+      if (!(await columnExists(usuarioTable,'google_expiry'))) {
+        await conn.query(`ALTER TABLE ${usuarioTable} ADD COLUMN google_expiry BIGINT NULL`);
+        console.log('🛠️  Columna usuario.google_expiry añadida');
+      }
+    }
     async function tableExists(table) {
       const [rows] = await conn.query(`SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ? LIMIT 1`, [dbName, table]);
       return rows.length > 0;
