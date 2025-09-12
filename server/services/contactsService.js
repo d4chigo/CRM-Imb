@@ -28,7 +28,7 @@ class ContactsService {
   static async list() {
     const s = await resolveSchema();
     const selectName = nameSelectExpr(s) + ' AS nombre';
-    const q = `SELECT id, ${selectName}, email, telefono, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} ORDER BY creado_en DESC`;
+    const q = `SELECT id, ${selectName}, email, telefono, dni, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} ORDER BY creado_en DESC`;
     return await executeQuery(q);
   }
 
@@ -66,14 +66,14 @@ class ContactsService {
     if (type) { where.push('tipo = ?'); params.push(type); }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const selectName = nameSelectExpr(s) + ' AS nombre';
-    const rows = await executeQuery(`SELECT id, ${selectName}, email, telefono, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} ${whereSql} ORDER BY creado_en DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
+    const rows = await executeQuery(`SELECT id, ${selectName}, email, telefono, dni, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} ${whereSql} ORDER BY creado_en DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
 
     const totalRow = await executeQuery(`SELECT COUNT(1) AS cnt FROM ${s.table} ${whereSql}`, params);
     const total = totalRow?.[0]?.cnt || 0;
     return { rows, total };
   }
 
-  static async create({ nombre, apellido = null, email, telefono, tipo = 'lead', origen, notas, departamento, sexo, fecha_nacimiento, etiquetas = [], etiqueta_otro = null }) {
+  static async create({ nombre, apellido = null, email, telefono, dni = null, tipo = 'lead', origen, notas, departamento, sexo, fecha_nacimiento, etiquetas = [], etiqueta_otro = null }) {
     const s = await resolveSchema();
     if (!sexo) {
       try { sexo = inferSexByName(nombre); } catch(_) {}
@@ -87,11 +87,11 @@ class ContactsService {
     const vals = [];
     if (s.hasNombreCompleto) { cols.push('nombre_completo'); vals.push(nombre); }
     else { cols.push('nombre'); vals.push(nombre); if (s.hasApellido) { cols.push('apellido'); vals.push(apellido); } }
-    cols.push('email','telefono','tipo', s.origenCol, s.notasCol, 'departamento','sexo','fecha_nacimiento','etiquetas_json','etiqueta_otro');
-    vals.push(email, telefono, tipo, origen || null, notas || null, departamento || null, sexo || null, fecha_nacimiento || null, etiquetasStr, etiqueta_otro || null);
+    cols.push('email','telefono','dni','tipo', s.origenCol, s.notasCol, 'departamento','sexo','fecha_nacimiento','etiquetas_json','etiqueta_otro');
+    vals.push(email, telefono, dni || null, tipo, origen || null, notas || null, departamento || null, sexo || null, fecha_nacimiento || null, etiquetasStr, etiqueta_otro || null);
     const placeholders = cols.map(()=>'?').join(',');
     const result = await executeQuery(`INSERT INTO ${s.table} (${cols.join(',')}) VALUES (${placeholders})`, vals);
-    return { id: result.insertId, nombre, email, telefono, tipo, origen, notas, departamento: departamento || null, sexo: sexo || null, fecha_nacimiento: fecha_nacimiento || null, etiquetas, etiqueta_otro: etiqueta_otro || null };
+    return { id: result.insertId, nombre, email, telefono, dni, tipo, origen, notas, departamento: departamento || null, sexo: sexo || null, fecha_nacimiento: fecha_nacimiento || null, etiquetas, etiqueta_otro: etiqueta_otro || null };
   }
 
   // Inserción masiva con deduplicación simple por email o teléfono
@@ -157,12 +157,12 @@ class ContactsService {
   static async get(id) {
     const s = await resolveSchema();
     const selectName = nameSelectExpr(s) + ' AS nombre';
-    const row = await queryOne(`SELECT id, ${selectName}, email, telefono, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} WHERE id = ?`, [id]);
+    const row = await queryOne(`SELECT id, ${selectName}, email, telefono, dni, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, etiquetas_json, etiqueta_otro, creado_en FROM ${s.table} WHERE id = ?`, [id]);
     if (!row) return row;
     try { if (row.etiquetas_json && typeof row.etiquetas_json === 'string') row.etiquetas = JSON.parse(row.etiquetas_json); else if (row.etiquetas_json) row.etiquetas = row.etiquetas_json; } catch(_) { row.etiquetas = []; }
     return row;
   }
-  static async update(id, { nombre, apellido, email, telefono, tipo, origen, notas, departamento, sexo, fecha_nacimiento, etiquetas, etiqueta_otro }) {
+  static async update(id, { nombre, apellido, email, telefono, dni, tipo, origen, notas, departamento, sexo, fecha_nacimiento, etiquetas, etiqueta_otro }) {
     const s = await resolveSchema();
     const existing = await this.get(id);
     if (!existing) throw new Error('Contacto no encontrado');
@@ -175,6 +175,7 @@ class ContactsService {
     if (apellido !== undefined && s.hasApellido) { fields.push('apellido = ?'); params.push(apellido); }
     if (email !== undefined) { fields.push('email = ?'); params.push(email); }
     if (telefono !== undefined) { fields.push('telefono = ?'); params.push(telefono); }
+    if (dni !== undefined) { fields.push('dni = ?'); params.push(dni); }
     if (tipo !== undefined) { fields.push('tipo = ?'); params.push(tipo); }
     if (origen !== undefined) { fields.push(`${s.origenCol} = ?`); params.push(origen); }
     if (notas !== undefined) { fields.push(`${s.notasCol} = ?`); params.push(notas); }

@@ -34,6 +34,7 @@ export interface ContactDTO {
   apellido?: string;
   email?: string; 
   telefono?: string; 
+  dni?: string;
   tipo?: string; 
   origen?: string; 
   notas?: string; 

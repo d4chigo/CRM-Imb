@@ -131,6 +131,12 @@ async function ensureSchema() {
       await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN fecha_nacimiento DATE NULL AFTER sexo`);
       console.log('🛠️  Columna contactos.fecha_nacimiento añadida');
     }
+    // Documento nacional de identidad (DNI)
+    if (!(await columnExists(contactsTable,'dni'))) {
+      // lo ubicamos después de telefono para UX
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN dni VARCHAR(32) NULL AFTER telefono`);
+      console.log('🛠️  Columna contactos.dni añadida');
+    }
     // Etiquetas para clasificar contactos
     if (!(await columnExists(contactsTable,'etiquetas_json'))) {
       try {

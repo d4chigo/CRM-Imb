@@ -16,6 +16,7 @@ export interface EditContactFormValues {
   apellido?: string;
   email?: string;
   telefono?: string;
+  dni?: string;
   tipo?: string; // lead | prospecto | cliente
   origen?: string; // (UI: medio_contacto)
   notas?: string; // (UI: observaciones)
@@ -35,7 +36,7 @@ interface Props {
 
 export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Props) {
   const { toast } = useToast();
-  const [form, setForm] = React.useState<EditContactFormValues>({ nombre: '', apellido: '', email: '', telefono: '', tipo: 'lead', origen: 'web', notas: '', departamento: '', sexo: undefined, fecha_nacimiento: '', etiquetas: [], etiqueta_otro: '' });
+  const [form, setForm] = React.useState<EditContactFormValues>({ nombre: '', apellido: '', email: '', telefono: '', dni: '', tipo: 'lead', origen: 'web', notas: '', departamento: '', sexo: undefined, fecha_nacimiento: '', etiquetas: [], etiqueta_otro: '' });
   const [loading, setLoading] = React.useState(false);
   const [showOther, setShowOther] = React.useState(false);
 
@@ -47,6 +48,7 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
         apellido: (contact as any).apellido || '',
         email: contact.email || '',
         telefono: contact.telefono || '',
+        dni: (contact as any).dni || '',
         tipo: contact.tipo || 'lead',
         origen: contact.origen || 'web',
         notas: contact.notas || '',
@@ -161,6 +163,12 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
             <div>
               <label className="text-[11px] font-medium text-gray-600">Teléfono</label>
               <Input name="telefono" value={form.telefono} onChange={handleChange} placeholder="999999999" className="h-9" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-medium text-gray-600">DNI</label>
+              <Input name="dni" value={form.dni || ''} onChange={handleChange} placeholder="Ej. 12345678" className="h-9" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
