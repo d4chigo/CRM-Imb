@@ -36,6 +36,7 @@ export function ContactsList() {
   const [editOpen, setEditOpen] = useState(false)
   const [contactEditing, setContactEditing] = useState<ContactDTO | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [creatingOppForId, setCreatingOppForId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [lastImport, setLastImport] = useState<{ imported: number; skipped: number } | null>(null)
@@ -539,8 +540,10 @@ export function ContactsList() {
                         <CalendarIcon className="h-4 w-4" />
                       </Button>
                       {/* Crear oportunidad en pipeline (persistente en backend) */}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" onClick={async () => {
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
                         try {
+                          if (creatingOppForId) return;
+                          setCreatingOppForId(c.id!)
                           // Primero persistimos en backend como oportunidad
                           const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
                           // Luego reflejamos en UI local (etapa contacto_inicial)
@@ -574,7 +577,7 @@ export function ContactsList() {
                           if (status === '403') msg = 'Sin permisos para crear oportunidades'
                           toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
                           console.error('[Pipeline] error creando oportunidad', status, e)
-                        }
+                        } finally { setCreatingOppForId(null) }
                       }}>
                         <Workflow className="h-4 w-4" />
                       </Button>

@@ -32,8 +32,9 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
   const [form, setForm] = React.useState<NewContactFormValues>({ nombre: '', apellido: '', email: '', telefono: '', tipo: 'lead', origen: 'web', notas: '', departamento: '', sexo: undefined, fecha_nacimiento: '', etiquetas: [], etiqueta_otro: '' });
 
   const [loading, setLoading] = React.useState(false);
+  const [showOther, setShowOther] = React.useState(false);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     const { name, value } = e.target;
     setForm(f => ({ ...f, [name]: value }));
   }
@@ -44,8 +45,8 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
       toast({ title: 'Nombre requerido', variant: 'destructive' });
       return;
     }
-    // Validar etiqueta única u 'otros'
-    if (!(form.etiquetas && form.etiquetas.length === 1) && !(form.etiqueta_otro && form.etiqueta_otro.trim())) {
+    // Validar etiqueta única u 'otros' (solo si showOther está activo o no hay selección)
+    if (!(form.etiquetas && form.etiquetas.length === 1) && !((showOther) && (form.etiqueta_otro && form.etiqueta_otro.trim()))) {
       toast({ title: 'Selecciona una etiqueta o especifica "Otros"', variant: 'destructive' });
       return;
     }
@@ -54,6 +55,7 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
       await Promise.resolve(onSubmit(form));
       toast({ title: 'Contacto creado', description: form.nombre });
       setForm({ nombre: '', apellido: '', email: '', telefono: '', tipo: 'lead', origen: 'web', notas: '', departamento: '', sexo: undefined, fecha_nacimiento: '', etiquetas: [], etiqueta_otro: '' });
+      setShowOther(false);
 
       onOpenChange(false);
     } finally {
@@ -93,18 +95,25 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
                 <label key={tag} className="flex items-center gap-2">
                   <input
                     type="radio"
-                    name="etiqueta_unica"
+                    name="new_etiqueta_unica"
                     checked={form.etiquetas?.[0] === tag}
-                    onChange={() => setForm(f => ({ ...f, etiquetas: [tag] }))}
+                    onChange={() => { setForm(f => ({ ...f, etiquetas: [tag], etiqueta_otro: '' })); setShowOther(false); }}
                   />
                   {tag}
                 </label>
               ))}
             </div>
-            <div>
-              <label className="text-[11px] font-medium text-gray-600">Otros (especificar)</label>
-              <Input name="etiqueta_otro" value={form.etiqueta_otro || ''} onChange={handleChange} placeholder="Ej. Programa especial" className="h-9" />
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => { setShowOther(v=>!v); if (!showOther) setForm(f=>({ ...f, etiquetas: [] })); }}>
+                Otros
+              </Button>
             </div>
+            {showOther && (
+              <div>
+                <label className="text-[11px] font-medium text-gray-600">Especificar</label>
+                <Input name="etiqueta_otro" value={form.etiqueta_otro || ''} onChange={handleChange} placeholder="Ej. Programa especial" className="h-9" />
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -157,7 +166,7 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
           </div>
           <div>
             <label className="text-[11px] font-medium text-gray-600">Observaciones</label>
-            <Textarea name="notas" value={form.notas} onChange={handleChange as any} placeholder="Observaciones" className="min-h-[72px] text-[13px]" />
+            <Textarea name="notas" value={form.notas} onChange={handleChange} placeholder="Observaciones" className="min-h-[72px] text-[13px]" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancelar</Button>
