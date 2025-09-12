@@ -146,7 +146,42 @@ async function ensureSchema() {
       await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN etiqueta_otro VARCHAR(160) NULL AFTER etiquetas_json`);
       console.log('🛠️  Columna contactos.etiqueta_otro añadida');
     }
-    // Nota: No creamos columna generada 'edad' para compatibilidad amplia. Las estadísticas la calculan al vuelo.
+    // Asegurar columna simple 'edad' (INT) para analítica y filtros rápidos
+    if (!(await columnExists(contactsTable,'edad'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN edad INT NULL AFTER fecha_nacimiento`);
+      console.log('🛠️  Columna contactos.edad añadida (INT)');
+      // Backfill con TIMESTAMPDIFF
+      await conn.query(`UPDATE ${contactsTable} SET edad = TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE()) WHERE fecha_nacimiento IS NOT NULL`);
+      console.log('↻ contactos.edad backfilled para registros existentes');
+      // Intentar crear triggers para mantener edad sincronizada
+      try {
+        // BEFORE INSERT
+        await conn.query(`DROP TRIGGER IF EXISTS ${contactsTable}_bi_edad`);
+        await conn.query(`CREATE TRIGGER ${contactsTable}_bi_edad BEFORE INSERT ON ${contactsTable}
+          FOR EACH ROW
+          BEGIN
+            IF NEW.fecha_nacimiento IS NOT NULL THEN
+              SET NEW.edad = TIMESTAMPDIFF(YEAR, NEW.fecha_nacimiento, CURDATE());
+            END IF;
+          END`);
+        // BEFORE UPDATE
+        await conn.query(`DROP TRIGGER IF EXISTS ${contactsTable}_bu_edad`);
+        await conn.query(`CREATE TRIGGER ${contactsTable}_bu_edad BEFORE UPDATE ON ${contactsTable}
+          FOR EACH ROW
+          BEGIN
+            IF NEW.fecha_nacimiento <> OLD.fecha_nacimiento THEN
+              IF NEW.fecha_nacimiento IS NOT NULL THEN
+                SET NEW.edad = TIMESTAMPDIFF(YEAR, NEW.fecha_nacimiento, CURDATE());
+              ELSE
+                SET NEW.edad = NULL;
+              END IF;
+            END IF;
+          END`);
+        console.log('⚙️  Triggers de sincronización de edad creados');
+      } catch (e) {
+        console.warn('⚠️  No se pudieron crear triggers de edad:', e.message);
+      }
+    }
     // etapas_pipeline
     if (!(await columnExists('etapas_pipeline','orden'))) {
       await conn.query(`ALTER TABLE etapas_pipeline ADD COLUMN orden INT NOT NULL DEFAULT 0 AFTER color_hex`);
