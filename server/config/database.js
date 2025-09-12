@@ -146,15 +146,7 @@ async function ensureSchema() {
       await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN etiqueta_otro VARCHAR(160) NULL AFTER etiquetas_json`);
       console.log('🛠️  Columna contactos.etiqueta_otro añadida');
     }
-    // Columna generada para edad (si el motor soporta columnas generadas)
-    if (!(await columnExists(contactsTable,'edad'))) {
-      try {
-        await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN edad INT GENERATED ALWAYS AS (TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE())) STORED`);
-        console.log('🛠️  Columna generada contactos.edad añadida');
-      } catch (e) {
-        console.warn('⚠️  No se pudo crear columna generada edad (posible versión MySQL). Ignorando.');
-      }
-    }
+    // Nota: No creamos columna generada 'edad' para compatibilidad amplia. Las estadísticas la calculan al vuelo.
     // etapas_pipeline
     if (!(await columnExists('etapas_pipeline','orden'))) {
       await conn.query(`ALTER TABLE etapas_pipeline ADD COLUMN orden INT NOT NULL DEFAULT 0 AFTER color_hex`);
