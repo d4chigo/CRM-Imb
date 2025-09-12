@@ -9,7 +9,7 @@ CREATE DATABASE IF NOT EXISTS `crm_imb`
 USE `crm_imb`;
 
 -- Tabla de usuarios del sistema (agentes, supervisores, administradores)
-CREATE TABLE IF NOT EXISTS `usuarios` (
+CREATE TABLE IF NOT EXISTS `usuario` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `nombre_completo` VARCHAR(120) NOT NULL,
   `email` VARCHAR(160) UNIQUE NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de agentes/comerciales (mantener compatibilidad)
-CREATE TABLE IF NOT EXISTS `agentes` (
+CREATE TABLE IF NOT EXISTS `agente` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `usuario_id` INT UNSIGNED, -- Referencia a tabla usuarios
   `nombre_completo` VARCHAR(120) NOT NULL,
@@ -36,24 +36,26 @@ CREATE TABLE IF NOT EXISTS `agentes` (
   `telefono` VARCHAR(40),
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`usuario_id`) REFERENCES `usuarios`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`usuario_id`) REFERENCES `usuario`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabla de contactos/clientes potenciales
-CREATE TABLE IF NOT EXISTS `contactos` (
+CREATE TABLE IF NOT EXISTS `contacto` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `nombre_completo` VARCHAR(120) NOT NULL,
+  `nombre` VARCHAR(120) NOT NULL,
+  `apellido` VARCHAR(120),
   `email` VARCHAR(160),
   `telefono` VARCHAR(40),
   `tipo` ENUM('lead','prospecto','cliente') DEFAULT 'lead',
-  `origen` VARCHAR(80),
-  `notas` TEXT,
+  `departamento` VARCHAR(160),
+  `medio_contacto` VARCHAR(80),
+  `observaciones` TEXT,
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Catálogo de servicios ofrecidos (p. ej., Compra/Venta/Crédito/Programa)
-CREATE TABLE IF NOT EXISTS `servicios` (
+-- Catálogo de cotizaciones (servicio para inmobiliaria)
+CREATE TABLE IF NOT EXISTS `cotizacion` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `nombre` VARCHAR(80) NOT NULL,
   `descripcion` TEXT,
@@ -70,8 +72,8 @@ CREATE TABLE IF NOT EXISTS `etapas_pipeline` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Oportunidades de venta (alineado con el modelo del frontend: nombre de servicio)
-CREATE TABLE IF NOT EXISTS `oportunidades` (
+-- Oportunidad de venta (singular)
+CREATE TABLE IF NOT EXISTS `oportunidad` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `contacto_id` INT UNSIGNED,
   `agente_id` INT UNSIGNED,
@@ -89,22 +91,22 @@ CREATE TABLE IF NOT EXISTS `oportunidades` (
   `actualizado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   PRIMARY KEY (`id`),
-  CONSTRAINT `fk_opo_contacto` FOREIGN KEY (`contacto_id`) REFERENCES `contactos`(`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_opo_agente`   FOREIGN KEY (`agente_id`)   REFERENCES `agentes`(`id`)   ON DELETE SET NULL,
-  CONSTRAINT `fk_opo_servicio` FOREIGN KEY (`servicio_id`) REFERENCES `servicios`(`id`) ON DELETE RESTRICT,
+  CONSTRAINT `fk_opo_contacto` FOREIGN KEY (`contacto_id`) REFERENCES `contacto`(`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_opo_agente`   FOREIGN KEY (`agente_id`)   REFERENCES `agente`(`id`)   ON DELETE SET NULL,
+  CONSTRAINT `fk_opo_servicio` FOREIGN KEY (`servicio_id`) REFERENCES `cotizacion`(`id`) ON DELETE RESTRICT,
   CONSTRAINT `fk_opo_etapa`    FOREIGN KEY (`etapa_id`)    REFERENCES `etapas_pipeline`(`id`) ON DELETE RESTRICT,
   CONSTRAINT `chk_opo_probabilidad` CHECK (`probabilidad` BETWEEN 0 AND 100)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Índices para optimizar consultas
-CREATE INDEX `idx_opo_servicio` ON `oportunidades`(`servicio_id`);
-CREATE INDEX `idx_opo_etapa`    ON `oportunidades`(`etapa_id`);
-CREATE INDEX `idx_opo_agente`   ON `oportunidades`(`agente_id`);
-CREATE INDEX `idx_opo_contacto` ON `oportunidades`(`contacto_id`);
-CREATE INDEX `idx_opo_cliente`  ON `oportunidades`(`nombre_cliente`);
+CREATE INDEX `idx_opo_servicio` ON `oportunidad`(`servicio_id`);
+CREATE INDEX `idx_opo_etapa`    ON `oportunidad`(`etapa_id`);
+CREATE INDEX `idx_opo_agente`   ON `oportunidad`(`agente_id`);
+CREATE INDEX `idx_opo_contacto` ON `oportunidad`(`contacto_id`);
+CREATE INDEX `idx_opo_cliente`  ON `oportunidad`(`nombre_cliente`);
 
--- Registro de actividades relacionadas a oportunidades (emails, llamadas, etc.)
-CREATE TABLE IF NOT EXISTS `actividades` (
+-- Registro de actividad relacionada a oportunidad (singular)
+CREATE TABLE IF NOT EXISTS `actividad` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `oportunidad_id` INT UNSIGNED,
   `tipo` ENUM('email','llamada','reunion','nota') NOT NULL,
@@ -113,15 +115,15 @@ CREATE TABLE IF NOT EXISTS `actividades` (
   `fecha_programada` DATETIME,
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  CONSTRAINT `fk_act_oportunidad` FOREIGN KEY (`oportunidad_id`) REFERENCES `oportunidades`(`id`) ON DELETE CASCADE
+  CONSTRAINT `fk_act_oportunidad` FOREIGN KEY (`oportunidad_id`) REFERENCES `oportunidad`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =================================================================
 -- DATOS BÁSICOS NECESARIOS
 -- =================================================================
 
--- Insertar servicios básicos si no existen
-INSERT IGNORE INTO servicios (id, nombre, descripcion) VALUES
+-- Insertar cotizaciones básicas si no existen
+INSERT IGNORE INTO cotizacion (id, nombre, descripcion) VALUES
 (1, 'Compra/Venta', 'Servicios de compra y venta de propiedades'),
 (2, 'Crédito Hipotecario', 'Asesoría en créditos hipotecarios'),
 (3, 'Programa VIP', 'Programa especializado para clientes VIP'),
@@ -135,7 +137,6 @@ INSERT IGNORE INTO etapas_pipeline (id, titulo, color_hex, orden) VALUES
 ('negociacion', 'Negociación', '#EF4444', 4),
 ('cierre', 'Cierre', '#10B981', 5);
 
--- Insertar usuario admin único si no existe (password: admin123 - debe cambiarse luego)
 -- Hash generado con bcrypt cost 10 para 'admin123'
-INSERT IGNORE INTO usuarios (id, nombre_completo, email, password_hash, rol) VALUES
+INSERT IGNORE INTO usuario (id, nombre_completo, email, password_hash, rol) VALUES
 (1, 'Administrador', 'admin@crm-imb.com', '$2b$10$tiuedvIrkDD6omK1INYf/umEfpP58cXEN3F4fnjmGkgVCfuMUIIOW', 'admin');

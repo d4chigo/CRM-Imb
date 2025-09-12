@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth');
 const GoogleContactsController = require('../controllers/googleContactsController');
+
 const router = express.Router();
 
 // Obtener URL de autorización de Google
@@ -21,5 +22,8 @@ router.get('/contacts/env-check', authenticateToken, (req,res)=>{
 		}
 	});
 });
+
+// Crear contacto simple en Google (nombre/apellido/email/telefono)
+router.post('/contacts/create', authenticateToken, GoogleContactsController.createGoogleContact);
 
 module.exports = router;

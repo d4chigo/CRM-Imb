@@ -47,23 +47,92 @@ async function ensureSchema() {
   try {
     const conn = await pool.getConnection();
     const dbName = config.database.database; // nombre de BD
-    // Helper para saber si existe columna
+    // Helpers primero
     async function columnExists(table, column) {
       const [rows] = await conn.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ? LIMIT 1`, [dbName, table, column]);
       return rows.length > 0;
     }
+    async function tableExists(table) {
+      const [rows] = await conn.query(`SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ? LIMIT 1`, [dbName, table]);
+      return rows.length > 0;
+    }
+    async function viewExists(view) {
+      const [rows] = await conn.query(`SELECT 1 FROM information_schema.views WHERE table_schema = ? AND table_name = ? LIMIT 1`, [dbName, view]);
+      return rows.length > 0;
+    }
+    // --- Compatibilidad de nombres singular/plural via VISTAS ---
+    // Si existen tablas en singular pero no en plural, crear vistas con nombres esperados por partes del sistema legado
+    async function ensureViewPlural(plural, singular) {
+      const hasPluralTable = await tableExists(plural);
+      const hasPluralView = await viewExists(plural);
+      const hasSingularTable = await tableExists(singular);
+      if (!hasPluralTable && !hasPluralView && hasSingularTable) {
+        await conn.query(`CREATE OR REPLACE VIEW ${plural} AS SELECT * FROM ${singular}`);
+        console.log(`🔗 Vista de compatibilidad creada: ${plural} -> ${singular}`);
+      }
+    }
+    await ensureViewPlural('usuarios','usuario');
+    await ensureViewPlural('agentes','agente');
+    await ensureViewPlural('contactos','contacto');
+    await ensureViewPlural('servicios','cotizacion');
+    await ensureViewPlural('oportunidades','oportunidad');
+    await ensureViewPlural('actividades','actividad');
+    // Resolver tabla de contactos (singular/plural)
+    const contactsTable = (await tableExists('contacto')) ? 'contacto' : 'contactos';
     // contactos
-    if (!(await columnExists('contactos','tipo'))) {
-      await conn.query(`ALTER TABLE contactos ADD COLUMN tipo ENUM('lead','prospecto','cliente') DEFAULT 'lead' AFTER telefono`);
+    if (!(await columnExists(contactsTable,'tipo'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN tipo ENUM('lead','prospecto','cliente') DEFAULT 'lead' AFTER telefono`);
       console.log('🛠️  Columna contactos.tipo añadida');
     }
-    if (!(await columnExists('contactos','origen'))) {
-      await conn.query(`ALTER TABLE contactos ADD COLUMN origen VARCHAR(80) AFTER tipo`);
+    // Soportar alias medio_contacto
+    if (!(await columnExists(contactsTable,'origen')) && !(await columnExists(contactsTable,'medio_contacto'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN origen VARCHAR(80) AFTER tipo`);
       console.log('🛠️  Columna contactos.origen añadida');
     }
-    if (!(await columnExists('contactos','notas'))) {
-      await conn.query(`ALTER TABLE contactos ADD COLUMN notas TEXT AFTER origen`);
+    if (!(await columnExists(contactsTable,'notas')) && !(await columnExists(contactsTable,'observaciones'))) {
+      // añadir notas si no existe ninguna de ambas
+      const afterCol = (await columnExists(contactsTable,'origen')) || !(await columnExists(contactsTable,'medio_contacto')) ? 'origen' : 'medio_contacto';
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN notas TEXT AFTER ${afterCol}`);
       console.log('🛠️  Columna contactos.notas añadida');
+    }
+    // Nuevas columnas para estadísticas: ubicación, sexo y fecha de nacimiento
+    if (!(await columnExists(contactsTable,'departamento'))) {
+      // ubicar después de notas/observaciones si existen
+      const after = (await columnExists(contactsTable,'notas')) ? 'notas' : ((await columnExists(contactsTable,'observaciones')) ? 'observaciones' : 'origen');
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN departamento VARCHAR(80) NULL AFTER ${after}`);
+      console.log('🛠️  Columna contactos.departamento añadida');
+    }
+    if (!(await columnExists(contactsTable,'sexo'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN sexo ENUM('M','F','O') NULL AFTER departamento`);
+      console.log('🛠️  Columna contactos.sexo añadida');
+    }
+    if (!(await columnExists(contactsTable,'fecha_nacimiento'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN fecha_nacimiento DATE NULL AFTER sexo`);
+      console.log('🛠️  Columna contactos.fecha_nacimiento añadida');
+    }
+    // Etiquetas para clasificar contactos
+    if (!(await columnExists(contactsTable,'etiquetas_json'))) {
+      try {
+        await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN etiquetas_json JSON NULL AFTER fecha_nacimiento`);
+        console.log('🛠️  Columna contactos.etiquetas_json añadida');
+      } catch (e) {
+        // Fallback para MySQL sin JSON real: usar TEXT
+        await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN etiquetas_json TEXT NULL AFTER fecha_nacimiento`);
+        console.log('🛠️  Columna contactos.etiquetas_json (TEXT fallback) añadida');
+      }
+    }
+    if (!(await columnExists(contactsTable,'etiqueta_otro'))) {
+      await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN etiqueta_otro VARCHAR(160) NULL AFTER etiquetas_json`);
+      console.log('🛠️  Columna contactos.etiqueta_otro añadida');
+    }
+    // Columna generada para edad (si el motor soporta columnas generadas)
+    if (!(await columnExists(contactsTable,'edad'))) {
+      try {
+        await conn.query(`ALTER TABLE ${contactsTable} ADD COLUMN edad INT GENERATED ALWAYS AS (TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE())) STORED`);
+        console.log('🛠️  Columna generada contactos.edad añadida');
+      } catch (e) {
+        console.warn('⚠️  No se pudo crear columna generada edad (posible versión MySQL). Ignorando.');
+      }
     }
     // etapas_pipeline
     if (!(await columnExists('etapas_pipeline','orden'))) {

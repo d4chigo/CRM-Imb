@@ -1,6 +1,10 @@
 const { google } = require('googleapis');
 const ContactsService = require('../services/contactsService');
 
+// Nota: Para una implementación productiva, guarda tokens por usuario en BD.
+// Aquí usamos almacenamiento en memoria del proceso como paso intermedio.
+let savedTokens = null;
+
 // Variables de entorno esperadas
 // GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
 
@@ -16,7 +20,11 @@ class GoogleContactsController {
   static authUrl(req, res) {
     try {
       const oauth2Client = getOAuthClient();
-      const scopes = ['https://www.googleapis.com/auth/contacts.readonly'];
+      const scopes = [
+        'https://www.googleapis.com/auth/contacts.readonly',
+        'https://www.googleapis.com/auth/contacts'
+      ];
+
       // Utilizamos state=popup para saber que debemos devolver HTML que hace postMessage
       const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: 'popup' });
   console.log('[googleImport] Generada URL de autorización Google');
@@ -54,6 +62,8 @@ class GoogleContactsController {
       const oauth2Client = getOAuthClient();
       const { tokens } = await oauth2Client.getToken(code);
       oauth2Client.setCredentials(tokens);
+      savedTokens = tokens; // guardar en memoria para usos posteriores (crear contacto)
+
   console.log('[googleImport] Tokens recibidos, llamando People API');
       const people = google.people({ version: 'v1', auth: oauth2Client });
       // Obtener contactos (batch inicialmente 1000)
@@ -102,3 +112,23 @@ class GoogleContactsController {
 }
 
 module.exports = GoogleContactsController;
+
+// Crear contacto en Google con nombre/apellido/email/telefono mínimos
+module.exports.createGoogleContact = async function(req, res) {
+  try {
+    const { nombre, apellido, email, telefono } = req.body || {};
+    if (!savedTokens) return res.status(401).json({ success:false, message:'No conectado a Google. Autoriza primero.' });
+    const oauth2Client = getOAuthClient();
+    oauth2Client.setCredentials(savedTokens);
+    const people = google.people({ version: 'v1', auth: oauth2Client });
+    const resource = {
+      names: [{ givenName: nombre || '', familyName: apellido || '' }],
+      emailAddresses: email ? [{ value: email }] : undefined,
+      phoneNumbers: telefono ? [{ value: telefono }] : undefined,
+    };
+    const resp = await people.people.createContact({ requestBody: resource });
+    return res.json({ success:true, data: { resourceName: resp.data.resourceName || null } });
+  } catch(e) {
+    return res.status(400).json({ success:false, message: e.message });
+  }
+}

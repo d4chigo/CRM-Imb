@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -12,10 +13,10 @@ import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewCo
 import { EditContactDialog, EditContactFormValues } from '@/components/forms/EditContactDialog'
 // Reemplazamos uso de hook local por contexto global del pipeline
 import { usePipeline } from '@/contexts/PipelineContext'
-import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO, listDuplicateContacts, mergeContacts } from "@/lib/contacts"
+import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO, listDuplicateContacts, mergeContacts, bulkTagContacts, bulkMoveContactsToPipeline } from "@/lib/contacts"
 import { createOpportunityFromContact } from '@/lib/opportunities'
 import { useAuth } from '@/contexts/AuthContext'
-import { getGoogleContactsAuthUrl, openGoogleImportPopup } from "@/lib/googleContacts"
+import { getGoogleContactsAuthUrl, openGoogleImportPopup, createGoogleContact } from "@/lib/googleContacts"
 import { useToast } from '@/hooks/use-toast'
 import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
 
@@ -39,6 +40,12 @@ export function ContactsList() {
   const [importing, setImporting] = useState(false)
   const [lastImport, setLastImport] = useState<{ imported: number; skipped: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkEtiqueta, setBulkEtiqueta] = useState<string>('')
+  const [bulkEtiquetaOtro, setBulkEtiquetaOtro] = useState<string>('')
+  const [bubblePos, setBubblePos] = useState<{ top:number; left:number } | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewContact, setPreviewContact] = useState<ContactDTO | null>(null)
   // Refs para manejo robusto del popup y watchers
   const popupRef = useRef<Window | null>(null)
   const watcherRef = useRef<number | null>(null)
@@ -48,6 +55,70 @@ export function ContactsList() {
   function clearWatchers() {
     if (watcherRef.current) { clearInterval(watcherRef.current); watcherRef.current = null }
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
+  }
+
+  function toggleSelected(id: number, ev?: React.ChangeEvent<HTMLInputElement>) {
+    // Reposicionar burbuja cerca del checkbox clicado
+    if (ev && ev.currentTarget) {
+      const rect = ev.currentTarget.getBoundingClientRect()
+      setBubblePos({ top: Math.round(rect.top + window.scrollY + 24), left: Math.round(rect.right + window.scrollX + 12) })
+    }
+    setSelectedIds(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  function clearSelection() { setSelectedIds(new Set()); setBubblePos(null) }
+
+  async function bulkDelete() {
+    if (!selectedIds.size) return
+    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} contacto(s)?`)
+    if (!confirmed) return
+    for (const id of Array.from(selectedIds)) {
+      try { await deleteContact(id) } catch(_) {}
+    }
+    setContacts(prev => prev.filter(c => !selectedIds.has(c.id!)))
+    clearSelection()
+    toast({ title: 'Eliminación masiva completada' })
+  }
+
+  async function bulkTag() {
+    if (!selectedIds.size) return
+    if (!bulkEtiqueta && !bulkEtiquetaOtro) { toast({ title:'Selecciona una etiqueta o especifica otra', variant:'destructive' }); return }
+    try {
+      await bulkTagContacts(Array.from(selectedIds), bulkEtiqueta || undefined as any, bulkEtiquetaOtro || undefined)
+      // Reflejar en estado local
+      setContacts(prev => prev.map(c => selectedIds.has(c.id!) ? { ...c, etiquetas: bulkEtiqueta ? [bulkEtiqueta] : [], etiqueta_otro: bulkEtiquetaOtro || null } : c))
+      // Feedback
+      toast({ title: 'Etiquetas aplicadas', description: `${selectedIds.size} contacto(s)` })
+      clearSelection()
+    } catch(e:any) {
+      toast({ title:'Error', description:e.message || 'No se pudo etiquetar', variant:'destructive' })
+    }
+  }
+
+  async function bulkMove() {
+    if (!selectedIds.size) return
+    try {
+      const ids = Array.from(selectedIds)
+      // Crear oportunidades por cada contacto seleccionado (servicio Cotización)
+      for (const id of ids) {
+        const c = contacts.find(x => x.id === id)
+        if (c) {
+          try { await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email }, 'contacto_inicial') } catch(_) {}
+        }
+      }
+      // Marcar como cliente en backend (y local)
+      await bulkMoveContactsToPipeline(ids)
+      setContacts(prev => prev.map(c => selectedIds.has(c.id!) ? { ...c, tipo: 'cliente' } : c))
+      toast({ title:'Movidos al pipeline', description:`${selectedIds.size} contacto(s)` })
+      setActiveTab('pipeline')
+      clearSelection()
+    } catch(e:any) {
+      toast({ title:'Error', description:e.message || 'No se pudo mover', variant:'destructive' })
+    }
   }
   function finalizeImport(imported:number, skipped:number) {
     setImporting(false)
@@ -173,24 +244,27 @@ export function ContactsList() {
   async function handleCreateContact(data: NewContactFormValues) {
     const created = await createContact({
       nombre: data.nombre,
+      apellido: data.apellido,
       email: data.email,
       telefono: data.telefono,
       tipo: data.tipo,
       origen: data.origen,
-      notas: data.notas
+      notas: data.notas,
+      departamento: data.departamento,
+      sexo: data.sexo,
+      fecha_nacimiento: data.fecha_nacimiento,
+      etiquetas: data.etiquetas,
+      etiqueta_otro: data.etiqueta_otro
     })
+    // Auto-sync mínimo a Google (si está autorizado): nombre/apellido/email/telefono
+    try { await createGoogleContact({ nombre: data.nombre, apellido: data.apellido, email: data.email, telefono: data.telefono }) }
+    catch(e:any) {
+      const msg = (e?.message || '').toString()
+      if (/401/.test(msg) || /No conectado a Google/i.test(msg)) {
+        toast({ title: 'Conecta Google para sincronizar', description: 'Autoriza en Importar Google para guardar también en tu cuenta.', variant: 'default' })
+      }
+    }
     setContacts(prev => [created, ...prev])
-    // Insertar como oportunidad inicial en etapa contacto_inicial (solo UI por ahora)
-    addOpportunity('contacto_inicial', {
-      clientName: created.nombre,
-      serviceName: 'N/A',
-      agent: 'Sin asignar',
-      value: 0,
-      probability: 0,
-      closeDate: new Date().toISOString().slice(0,10),
-      phone: created.telefono || '',
-      email: created.email || ''
-    })
   }
 
   // --- Manejo edición ---
@@ -318,6 +392,37 @@ export function ContactsList() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && bubblePos && (
+        <div className="fixed z-40" style={{ top: bubblePos.top, left: bubblePos.left }}>
+          <div className="rounded-lg shadow-lg border bg-white p-3 w-[320px]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm">Seleccionados: <b>{selectedIds.size}</b></div>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>Limpiar</Button>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Etiqueta</label>
+                <select value={bulkEtiqueta} onChange={e=>setBulkEtiqueta(e.target.value)} className="mt-1 w-full border rounded-md h-8 px-2 bg-white text-sm">
+                  <option value="">Selecciona…</option>
+                  <option value="Techo Propio">Techo Propio</option>
+                  <option value="Credito Mivivienda">Credito Mivivienda</option>
+                  <option value="Terreno en Captacion">Terreno en Captacion</option>
+                  <option value="Tasaciones">Tasaciones</option>
+                  <option value="Construccion">Construccion</option>
+                  <option value="Levantamiento Topografico">Levantamiento Topografico</option>
+                </select>
+              </div>
+              <Input value={bulkEtiquetaOtro} onChange={e=>setBulkEtiquetaOtro(e.target.value)} placeholder="Otros (opcional)" className="h-8 text-sm" />
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={bulkTag}>Etiquetar</Button>
+                <Button variant="outline" size="sm" onClick={bulkMove}>Pipeline</Button>
+                <Button variant="destructive" size="sm" onClick={bulkDelete}>Eliminar</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
@@ -401,7 +506,12 @@ export function ContactsList() {
             <Card key={c.id} className="border border-gray-200 group">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center justify-between text-base font-semibold">
-                  <span className="truncate" title={c.nombre}>{c.nombre}</span>
+                  <span className="truncate flex items-center gap-2" title={c.nombre}>
+                    <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
+                    <button type="button" className="text-left hover:underline" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
+                      {c.nombre}
+                    </button>
+                  </span>
                   <div className="flex items-center gap-2">
                     <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
                     <div className="flex gap-1">
@@ -429,16 +539,16 @@ export function ContactsList() {
                         <CalendarIcon className="h-4 w-4" />
                       </Button>
                       {/* Crear oportunidad en pipeline (persistente en backend) */}
-            <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" onClick={async () => {
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" onClick={async () => {
                         try {
                           // Primero persistimos en backend como oportunidad
                           const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
                           // Luego reflejamos en UI local (etapa contacto_inicial)
-              console.log('[Pipeline] creando oportunidad desde contacto', opp)
+                          console.log('[Pipeline] creando oportunidad desde contacto', opp)
                           addOpportunity('contacto_inicial', {
                             id: String(opp.id), // usar id backend para permitir persistir movimientos
                             clientName: opp.nombreCliente || c.nombre,
-                            serviceName: 'Servicio',
+                            serviceName: 'Cotización',
                             agent: 'Sin asignar',
                             value: opp.valorUsd || 0,
                             probability: opp.probabilidad || 0,
@@ -446,6 +556,11 @@ export function ContactsList() {
                             phone: opp.telefono || c.telefono || '',
                             email: opp.email || c.email || ''
                           })
+                          // Actualizar tipo del contacto a 'cliente' (backend + UI)
+                          try {
+                            await updateContact(c.id!, { tipo: 'cliente' })
+                            setContacts(prev => prev.map(x => x.id === c.id ? { ...x, tipo: 'cliente' } : x))
+                          } catch(_) { /* no bloquear por este fallo */ }
                           toast({ title: 'Oportunidad creada', description: c.nombre })
                           // Cambiar automáticamente a la pestaña pipeline para mostrar la nueva oportunidad
                           setActiveTab('pipeline')
@@ -506,6 +621,31 @@ export function ContactsList() {
         </div>
       </div>
     )}
+    {/* Preview dialog */}
+    <Dialog open={previewOpen} onOpenChange={(v)=>{ setPreviewOpen(v); if(!v) setPreviewContact(null) }}>
+      <DialogContent className="max-w-md sm:max-w-lg p-4 max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Contacto</DialogTitle>
+        </DialogHeader>
+        {previewContact && (
+          <div className="space-y-2 text-sm">
+            <div><span className="text-gray-500">Nombre:</span> {previewContact.nombre}</div>
+            <div><span className="text-gray-500">Email:</span> {previewContact.email || '—'}</div>
+            <div><span className="text-gray-500">Teléfono:</span> {previewContact.telefono || '—'}</div>
+            <div><span className="text-gray-500">Tipo:</span> {previewContact.tipo || 'lead'}</div>
+            <div><span className="text-gray-500">Etiqueta:</span> {(previewContact.etiquetas && previewContact.etiquetas[0]) || previewContact.etiqueta_otro || '—'}</div>
+            <div><span className="text-gray-500">Departamento:</span> {(previewContact as any).departamento || '—'}</div>
+            <div><span className="text-gray-500">Sexo:</span> {(previewContact as any).sexo || '—'}</div>
+            <div><span className="text-gray-500">F. Nacimiento:</span> {((previewContact as any).fecha_nacimiento || '').toString().slice(0,10) || '—'}</div>
+            {previewContact.notas && (
+              <div><span className="text-gray-500">Notas:</span>
+                <div className="mt-1 whitespace-pre-line">{previewContact.notas}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
     </div>
   )
 }

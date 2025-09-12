@@ -12,6 +12,7 @@ import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
 import { PropertiesList } from "@/components/properties-list"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
+import { StatsDashboard } from "@/components/stats-dashboard"
 
 function DashboardInner() {
   const { activeTab, setActiveTab } = useDashboardTabs()
@@ -94,11 +95,12 @@ function DashboardInner() {
 
         {/* Main Content */}
   <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="pipeline">Pipeline de Ventas</TabsTrigger>
             <TabsTrigger value="contacts">Contactos</TabsTrigger>
-            <TabsTrigger value="properties">Servicios</TabsTrigger>
+            <TabsTrigger value="properties">Cotizaciones</TabsTrigger>
             <TabsTrigger value="activities">Actividades</TabsTrigger>
+            <TabsTrigger value="statistics">Estadísticas</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pipeline" className="space-y-6">
@@ -129,6 +131,20 @@ function DashboardInner() {
                     Implementar conexión con API de actividades
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="statistics" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Filtros de Análisis Estadísticos</CardTitle>
+                <CardDescription>
+                  De dónde son mis clientes, por departamentos, por rangos de edad (25-30, 35-40) y por sexo.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StatsDashboard />
               </CardContent>
             </Card>
           </TabsContent>

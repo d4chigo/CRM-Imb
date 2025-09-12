@@ -24,3 +24,17 @@ export function openGoogleImportPopup(url: string) {
   const top = window.screenY + (window.outerHeight - h)/2;
   return window.open(url, 'googleImport', `width=${w},height=${h},left=${left},top=${top}`);
 }
+
+export async function createGoogleContact(payload: { nombre?: string; apellido?: string; email?: string; telefono?: string }) {
+  const res = await fetch(`${API_BASE_URL}/api/google/contacts/create`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() } as HeadersInit,
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) {
+    // No romper el flujo principal; lanza error para logging del caller
+    const text = await res.text().catch(()=> '')
+    throw new Error(text || 'No se pudo crear el contacto en Google')
+  }
+  return res.json()
+}
