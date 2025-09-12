@@ -274,6 +274,8 @@ export function ContactsList() {
       const updated = await updateContact(id, data)
       // Actualizamos estado local sin refetch completo
       setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updated } : c))
+      // Crear en Google si está autorizado (por ahora solo en creación; edición futura como upsert)
+      try { await createGoogleContact({ nombre: data.nombre || updated.nombre, apellido: (updated as any).apellido, email: data.email || updated.email, telefono: data.telefono || updated.telefono }) } catch(_) {}
     } catch(e:any) {
       toast({ title: 'Error', description: e.message || 'No se pudo actualizar', variant: 'destructive' })
       throw e

@@ -5,6 +5,19 @@ function authHeaders(): Record<string,string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export async function upsertGoogleContact(payload: { nombre?: string; apellido?: string; email?: string; telefono?: string }) {
+  const res = await fetch(`${API_BASE_URL}/api/google/contacts/upsert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() } as HeadersInit,
+    body: JSON.stringify(payload)
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(()=> '')
+    throw new Error(text || 'No se pudo crear/actualizar el contacto en Google')
+  }
+  return res.json()
+}
+
 export async function getGoogleContactsAuthUrl(): Promise<string> {
   const res = await fetch(`${API_BASE_URL}/api/google/contacts/auth-url`, { headers: { ...authHeaders() } });
   if (!res.ok) {

@@ -139,6 +139,7 @@ module.exports.createGoogleContact = async function(req, res) {
   try {
     const { nombre, apellido, email, telefono } = req.body || {};
     const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
+    console.log('[googleSync] createGoogleContact request', { userId, nombre, hasEmail: !!email, hasTelefono: !!telefono });
     // Recuperar tokens del usuario
     let row = null;
     if (userId) {
@@ -148,9 +149,12 @@ module.exports.createGoogleContact = async function(req, res) {
     const oauth2Client = getOAuthClient();
     if (row && (row.google_access_token || row.google_refresh_token)) {
       oauth2Client.setCredentials({ access_token: row.google_access_token || undefined, refresh_token: row.google_refresh_token || undefined, expiry_date: row.google_expiry || undefined });
+      console.log('[googleSync] Using persisted tokens from DB');
     } else if (savedTokens) {
       oauth2Client.setCredentials(savedTokens);
+      console.log('[googleSync] Using in-memory tokens');
     } else {
+      console.warn('[googleSync] No tokens available to call Google');
       return res.status(401).json({ success:false, message:'No conectado a Google. Autoriza primero.' });
     }
     const people = google.people({ version: 'v1', auth: oauth2Client });
@@ -160,15 +164,18 @@ module.exports.createGoogleContact = async function(req, res) {
       phoneNumbers: telefono ? [{ value: telefono }] : undefined,
     };
     const resp = await people.people.createContact({ requestBody: resource });
+    console.log('[googleSync] createContact OK', resp.data && resp.data.resourceName);
     // Si el client refrescó access token, guardar nuevo token/expiry si se encuentran en credenciales
     try {
       const creds = oauth2Client.credentials || {};
       if (userId && (creds.access_token || creds.expiry_date)) {
         await executeQuery('UPDATE usuario SET google_access_token = COALESCE(?, google_access_token), google_expiry = COALESCE(?, google_expiry) WHERE id = ?', [creds.access_token || null, creds.expiry_date || null, userId]);
       }
-    } catch(_) {}
+    } catch(err) { console.warn('[googleSync] Could not persist refreshed token', err && err.message); }
     return res.json({ success:true, data: { resourceName: resp.data.resourceName || null } });
   } catch(e) {
-    return res.status(400).json({ success:false, message: e.message });
+    console.error('[googleSync] createGoogleContact error', e && (e.response?.data || e.message || e));
+    const msg = (e && e.response && e.response.data && e.response.data.error && e.response.data.error.message) ? e.response.data.error.message : (e.message || 'Error creando contacto en Google');
+    return res.status(400).json({ success:false, message: msg });
   }
 }
