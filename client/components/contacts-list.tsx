@@ -350,9 +350,25 @@ export function ContactsList() {
     if (!confirmed) return
     setDeletingId(id)
     try {
+      const prevCount = contacts.length
+      const currentPage = page
+      const currentTotal = total
       await deleteContact(id)
       setContacts(prev => prev.filter(c => c.id !== id))
+      setTotal(t => Math.max(0, t - 1))
       toast({ title: 'Contacto eliminado' })
+      // Rellenar huecos: si hay más elementos después de esta página, recargar; si la página quedó vacía y no es la primera, retroceder una página
+      const newTotal = Math.max(0, currentTotal - 1)
+      const hasMoreAfterPage = currentPage * pageSize <= newTotal
+      if (prevCount <= 1 && currentPage > 1) {
+        // Esta página se quedó sin elementos, ir a la anterior
+        const prevPage = currentPage - 1
+        setPage(prevPage)
+        loadContacts({ page: prevPage })
+      } else if (hasMoreAfterPage) {
+        // Hay más elementos que deberían completar la página actual
+        loadContacts({ page: currentPage })
+      }
     } catch(e:any) {
       // Parsear formato mensaje|STATUS:### si existe
       let raw = e.message || ''
@@ -410,16 +426,16 @@ export function ContactsList() {
     return (
       <Card key={c.id} className="border border-gray-200 group">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center justify-between text-base font-semibold">
-            <span className="truncate flex items-center gap-2" title={c.nombre}>
+          <CardTitle className="flex items-center justify-between text-base font-semibold gap-2">
+            <span className="min-w-0 flex items-center gap-2 flex-1" title={c.nombre}>
               <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
-              <button type="button" className="text-left hover:underline" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
+              <button type="button" className="text-left hover:underline truncate max-w-full" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
                 {c.nombre}
               </button>
             </span>
-            <div className="flex items-center gap-2">
-              <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-              <div className="flex gap-1">
+            <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+              <Badge className="flex-shrink-0" style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
+              <div className="flex gap-1 flex-shrink-0 whitespace-nowrap">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
