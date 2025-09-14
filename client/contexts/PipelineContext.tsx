@@ -9,6 +9,7 @@ import type { Column, Opportunity } from '@/types/pipeline';
 import { initialColumns } from '@/data/pipeline';
 import { fetchStages } from '@/lib/pipelineStages';
 import { listOpportunities } from '@/lib/opportunities';
+import { listCotizaciones } from '@/lib/cotizaciones';
 import { canonicalStageOrder } from '@/hooks/use-pipeline-dnd';
 
 interface PipelineContextValue {
@@ -49,7 +50,12 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
           return ia - ib;
         });
         try {
-          const opps = await listOpportunities();
+          const [opps, servicios] = await Promise.all([
+            listOpportunities(),
+            listCotizaciones().catch(() => [])
+          ]);
+          const servicioMap = new Map<number, string>();
+          (servicios as any[]).forEach((s:any) => servicioMap.set(Number(s.id), s.nombre));
           opps.forEach(o => {
             const etapa = o.etapaId || 'contacto_inicial';
             let col = mapped.find(c => c.id === etapa);
@@ -60,7 +66,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
             col.opportunities.push({
               id: String(o.id),
               clientName: o.nombreCliente,
-              serviceName: 'Servicio',
+              serviceName: (o.servicioId && servicioMap.get(Number(o.servicioId))) || 'Servicio',
               agent: 'Sin asignar',
               value: o.valorUsd || 0,
               probability: o.probabilidad || 0,
