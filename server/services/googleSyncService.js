@@ -172,6 +172,7 @@ class GoogleSyncService {
       if (!auth) return { synced: 0, total: 0 };
 
       const people = google.people({ version: 'v1', auth });
+      const includeOther = String(process.env.GOOGLE_INCLUDE_OTHER_CONTACTS || '').toLowerCase() === 'true';
 
       // 1) Mis contactos ("Contacts")
       const connResp = await people.people.connections.list({
@@ -179,14 +180,27 @@ class GoogleSyncService {
         pageSize: 2000,
         personFields: 'names,emailAddresses,phoneNumbers,organizations,userDefined,biographies,metadata'
       });
-      const connections = connResp.data.connections || [];
-
-      // 2) Otros contactos ("Other contacts") — permitido: names,emailAddresses,phoneNumbers
-      const otherResp = await people.otherContacts.list({
-        pageSize: 1000,
-        readMask: 'names,emailAddresses,phoneNumbers',
+      const connections = (connResp.data.connections || []).filter(p => {
+        // Filtrar borrados y sin email/teléfono
+        const deleted = p.metadata?.deleted === true;
+        const hasEmail = Array.isArray(p.emailAddresses) && p.emailAddresses.some(e=>!!e.value);
+        const hasPhone = Array.isArray(p.phoneNumbers) && p.phoneNumbers.some(ph=>!!ph.value);
+        return !deleted && (hasEmail || hasPhone);
       });
-      const otherContacts = otherResp.data.otherContacts || [];
+
+      // 2) Otros contactos ("Other contacts") — opcional y filtrado mínimo
+      let otherContacts = [];
+      if (includeOther) {
+        const otherResp = await people.otherContacts.list({
+          pageSize: 1000,
+          readMask: 'names,emailAddresses,phoneNumbers',
+        });
+        otherContacts = (otherResp.data.otherContacts || []).filter(p => {
+          const hasEmail = Array.isArray(p.emailAddresses) && p.emailAddresses.some(e=>!!e.value);
+          const hasPhone = Array.isArray(p.phoneNumbers) && p.phoneNumbers.some(ph=>!!ph.value);
+          return hasEmail || hasPhone;
+        });
+      }
 
       // Unificar y deduplicar por resourceName si existe
       const all = [];
@@ -199,6 +213,11 @@ class GoogleSyncService {
       for (const person of all) {
         try {
           const mapped = this.mapGooglePerson(person);
+          // Ignorar entradas sin email y sin teléfono incluso después de mapear
+          if (!mapped.email && !mapped.telefono) continue;
+
+          // Normalizar teléfono para deduplicación
+          const phoneDigits = (mapped.telefono || '').toString().replace(/[^\d]/g, '') || null;
 
           // Buscar por resourceName primero
           let existing = null;
@@ -209,14 +228,15 @@ class GoogleSyncService {
           }
 
           // Si no existe por resourceName, deduplicar por email o teléfono (si existen)
-          if (!existing && (mapped.email || mapped.telefono)) {
+          if (!existing && (mapped.email || phoneDigits)) {
             const s = await resolveContactsSchema();
+            // Comparar email directo; para teléfono, comparar contra teléfono normalizado de la BD (quitando espacios, símbolos comunes)
             const rows = await executeQuery(
-              `SELECT id FROM ${s.table} 
-               WHERE (email IS NOT NULL AND email = ?) 
-                  OR (telefono IS NOT NULL AND telefono = ?) 
+              `SELECT id FROM ${s.table}
+               WHERE (email IS NOT NULL AND email = ?)
+                  OR (telefono IS NOT NULL AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(telefono,'-',''),' ',''),'(',''),')',''),'+','') = ?)
                LIMIT 1`,
-              [mapped.email || '', mapped.telefono || '']
+              [mapped.email || '', phoneDigits || '']
             );
             existing = rows && rows[0] ? rows[0] : null;
           }
