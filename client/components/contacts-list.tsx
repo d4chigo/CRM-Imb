@@ -73,6 +73,20 @@ export function ContactsList() {
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
   }
 
+  // Fallback suave: si el popup se cierra sin mensaje, refresca la lista sin marcar error
+  function gentleRefreshAfterClose(reason?: string) {
+    setImporting(false)
+    setImportFailed(null)
+    clearWatchers()
+    try { popupRef.current?.close() } catch(_) {}
+    popupRef.current = null
+    // Refrescar a la primera página para ver lo nuevo, por si importó en segundo plano
+    loadContacts({ page: 1 })
+    if (reason) {
+      toast({ title: 'Importación', description: reason })
+    }
+  }
+
   function toggleSelected(id: number, ev?: React.ChangeEvent<HTMLInputElement>) {
     // Reposicionar burbuja cerca del checkbox clicado
     if (ev && ev.currentTarget) {
@@ -218,7 +232,9 @@ export function ContactsList() {
     // Fallback al recuperar foco (user cerró popup)
     function onFocus() {
       if (popupRef.current && popupRef.current.closed && importing) {
-        if (!checkLocalStorageFallback()) failImport('Popup cerrado sin completar.')
+        if (!checkLocalStorageFallback()) {
+          gentleRefreshAfterClose('Ventana cerrada. Actualizando lista…')
+        }
       }
     }
     window.addEventListener('focus', onFocus)
@@ -519,17 +535,17 @@ export function ContactsList() {
                 if (checkLocalStorageFallback()) return; // ya se limpió dentro
                 if (popupRef.current && popupRef.current.closed) {
                   if (Date.now() - started > 800) {
-                    failImport('Popup cerrado sin completar.');
+                    gentleRefreshAfterClose('Se cerró el popup. Actualizando lista…');
                   } else {
                     // cierre inmediato: quizá el navegador bloqueó; intentamos fallback
-                    if (!checkLocalStorageFallback()) failImport('Popup bloqueado o cerrado.');
+                    if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Popup bloqueado o cerrado. Actualizando lista…');
                   }
                 }
               }, 400);
               // Timeout duro por si nada llega
               timeoutRef.current = window.setTimeout(() => {
                 if (importing) {
-                  if (!checkLocalStorageFallback()) failImport('Tiempo de espera agotado (20s)');
+                  if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Tiempo de espera agotado. Actualizando lista…');
                 }
               }, 20000);
             } catch(e:any) {
