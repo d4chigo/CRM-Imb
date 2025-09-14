@@ -10,7 +10,7 @@ import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
 import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
-import { PropertiesList } from "@/components/properties-list"
+import { CotizacionesList } from "@/components/cotizaciones-list"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
 
@@ -112,7 +112,7 @@ function DashboardInner() {
           </TabsContent>
 
           <TabsContent value="properties" className="space-y-6">
-            <PropertiesList />
+            <CotizacionesList />
           </TabsContent>
 
           <TabsContent value="activities" className="space-y-6">
