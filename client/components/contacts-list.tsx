@@ -426,16 +426,16 @@ export function ContactsList() {
     return (
       <Card key={c.id} className="border border-gray-200 group">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold gap-2 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-base font-semibold gap-2 flex flex-col sm:flex-row sm:items-center sm:justify-between sm:space-y-0 space-y-2">
             <span className="min-w-0 flex items-center gap-2 sm:flex-1" title={c.nombre}>
               <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
               <button type="button" className="text-left hover:underline truncate max-w-full" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
                 {c.nombre}
               </button>
             </span>
-            <div className="flex items-center gap-2 sm:ml-2 flex-wrap">
+            <div className="flex items-center gap-2 sm:ml-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end max-w-full">
               <Badge className="shrink-0" style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex gap-1 flex-wrap max-w-full">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
