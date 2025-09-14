@@ -143,7 +143,12 @@ export async function updateContact(id: number, patch: Partial<ContactDTO>): Pro
     body: JSON.stringify(patch), 
     credentials: 'include' 
   });
-  if (!res.ok) throw new Error('Error actualizando contacto');
+  if (!res.ok) {
+    let serverMsg = '';
+    try { const data = await res.json(); serverMsg = data?.message || ''; } catch(_) { try { serverMsg = await res.text(); } catch(_) {} }
+    const base = serverMsg || 'Error actualizando contacto';
+    throw new Error(`${base}|STATUS:${res.status}`);
+  }
   const data = await res.json();
   return data.data;
 }

@@ -7,7 +7,7 @@ const { queryOne } = require('../config/database');
  * Middleware para verificar token JWT en las requests
  * Extrae el token del header Authorization y valida su autenticidad
  */
-const authenticateToken = async (req, res, next) => {
+const isAuthenticated = async (req, res, next) => {
   try {
     // Extraer token del header Authorization
     const authHeader = req.headers['authorization'];
@@ -51,51 +51,57 @@ const authenticateToken = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ 
         success: false, 
-        message: 'Token expirado',
-        code: 'TOKEN_EXPIRED'
+        message: 'Token expirado. Por favor, inicia sesión nuevamente.' 
       });
     }
-    
+
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
+      return res.status(403).json({ 
         success: false, 
         message: 'Token inválido' 
       });
     }
 
-    return res.status(500).json({ 
+    res.status(500).json({ 
       success: false, 
-      message: 'Error interno de autenticación' 
+      message: 'Error en la autenticación' 
     });
   }
 };
 
 /**
  * Middleware para verificar roles específicos
- * Debe usarse después de authenticateToken
+ * Debe usarse después de isAuthenticated
  */
 const requireRole = (roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ 
+    try {
+      if (!req.user) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Autenticación requerida' 
+        });
+      }
+
+      if (!Array.isArray(roles)) {
+        roles = [roles];
+      }
+
+      if (!roles.includes(req.user.rol)) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'No tienes permiso para realizar esta acción' 
+        });
+      }
+
+      next();
+    } catch (error) {
+      console.error('Error en verificación de rol:', error);
+      res.status(500).json({ 
         success: false, 
-        message: 'Usuario no autenticado' 
+        message: 'Error en la verificación de permisos' 
       });
     }
-
-    const userRole = req.user.rol;
-    const allowedRoles = Array.isArray(roles) ? roles : [roles];
-
-    if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'No tienes permisos para realizar esta acción',
-        requiredRoles: allowedRoles,
-        userRole: userRole
-      });
-    }
-
-    next();
   };
 };
 
@@ -104,14 +110,8 @@ const requireRole = (roles) => {
  */
 const requireAdmin = requireRole(['admin']);
 
-/**
- * Middleware para verificar que el usuario es supervisor o admin
- */
-const requireSupervisor = requireRole(['supervisor', 'admin']);
-
 module.exports = {
-  authenticateToken,
+  isAuthenticated,
   requireRole,
-  requireAdmin,
-  requireSupervisor,
+  requireAdmin
 };

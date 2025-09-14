@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
-const ContactsService = require('../services/contactsService');
 const { executeQuery } = require('../config/database');
+const GoogleSyncService = require('../services/googleSyncService');
 
 // Nota: Para una implementación productiva, guarda tokens por usuario en BD.
 // Aquí usamos almacenamiento en memoria del proceso como paso intermedio.
@@ -23,18 +23,28 @@ class GoogleContactsController {
       const oauth2Client = getOAuthClient();
       const scopes = [
         'https://www.googleapis.com/auth/contacts.readonly',
-        'https://www.googleapis.com/auth/contacts'
+        'https://www.googleapis.com/auth/contacts',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        // Para leer "Other Contacts" (sugeridos de Gmail)
+        'https://www.googleapis.com/auth/contacts.other.readonly'
       ];
 
       // Incluir el id de usuario en state para persistir tokens en callback
       const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
       const statePayload = encodeURIComponent(JSON.stringify({ popup: true, uid: userId }));
-      const url = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent', state: statePayload });
-  console.log('[googleImport] Generada URL de autorización Google');
-      res.json({ success:true, url });
+      const url = oauth2Client.generateAuthUrl({ 
+        access_type: 'offline', 
+        scope: scopes, 
+        prompt: 'consent', 
+        state: statePayload,
+        include_granted_scopes: true
+      });
+      
+      console.log('[googleImport] Generada URL de autorización Google');
+      res.json({ success: true, url });
     } catch (e) {
-  console.error('[googleImport] Error generando URL:', e.message);
-      res.status(500).json({ success:false, message:e.message });
+      console.error('[googleImport] Error generando URL:', e.message);
+      res.status(500).json({ success: false, message: e.message });
     }
   }
 
@@ -48,134 +58,181 @@ class GoogleContactsController {
         if (state === 'popup') {
           return res.send(`<!doctype html><html><head><title>Importación cancelada</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">
             <h3>Importación cancelada</h3>
-            <p>${error === 'access_denied' ? 'No diste permisos o la app no está autorizada.' : 'Error: ' + error}</p>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({ type: 'google-import-error', error: '${error}', description: ${JSON.stringify(error_description || '')} }, '*');
-                setTimeout(()=> window.close(), 1200);
-              }
-            </script>
-          </body></html>`);
+            <p>${error_description || 'El usuario canceló la autorización'}</p>
+            <script>try{ if (window.opener) { window.opener.postMessage({ type: 'google-import-error', error: ${JSON.stringify(error)}, description: ${JSON.stringify(error_description || '')} }, '*'); } }catch(_){} setTimeout(()=>window.close(), 800);</script>
+            </body></html>`);
         }
-        return res.status(400).json({ success:false, error, description: error_description });
+        throw new Error(error_description || `Error de autorización: ${error}`);
       }
-      const code = req.query.code;
-      const stateRaw = req.query.state; // JSON con { popup, uid }
-      let state = { popup: false, uid: null };
-      try { if (stateRaw) state = JSON.parse(decodeURIComponent(stateRaw)); } catch(_) {}
-      if (!code) return res.status(400).json({ success:false, message:'Código no provisto' });
+
+      const { code } = req.query;
+      const state = JSON.parse(decodeURIComponent(req.query.state || '{}'));
+      const userId = state.uid || (req.user && (req.user.id || req.user.userId));
+      
+      if (!userId) {
+        throw new Error('No se pudo identificar al usuario para guardar los tokens');
+      }
+
       const oauth2Client = getOAuthClient();
       const { tokens } = await oauth2Client.getToken(code);
-      oauth2Client.setCredentials(tokens);
-      savedTokens = tokens; // guardar en memoria para usos posteriores (crear contacto)
+      
+      // Guardar tokens en la base de datos
+      await executeQuery(
+        `INSERT INTO google_tokens 
+         (usuario_id, access_token, refresh_token, scope, token_type, expiry_date, sync_enabled, last_sync)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE, NULL)
+         ON DUPLICATE KEY UPDATE
+         access_token = VALUES(access_token),
+         refresh_token = COALESCE(VALUES(refresh_token), refresh_token),
+         scope = VALUES(scope),
+         token_type = VALUES(token_type),
+         expiry_date = VALUES(expiry_date),
+         sync_enabled = TRUE,
+         updated_at = NOW()`,
+        [
+          userId,
+          tokens.access_token,
+          tokens.refresh_token || null,
+          tokens.scope,
+          tokens.token_type,
+          tokens.expiry_date || null
+        ]
+      );
 
-      // Persistir tokens por usuario si state.uid válido
+      // Sincronizar contactos automáticamente
+      let syncResult = { synced: 0, total: 0 };
       try {
-        if (state && state.uid) {
-          await executeQuery('UPDATE usuario SET google_access_token = ?, google_refresh_token = COALESCE(?, google_refresh_token), google_scope = ?, google_expiry = ? WHERE id = ?', [
-            tokens.access_token || null,
-            tokens.refresh_token || null,
-            tokens.scope || null,
-            tokens.expiry_date || null,
-            state.uid
-          ]);
-          console.log('[googleImport] Tokens persistidos para usuario', state.uid);
-        }
-      } catch(err) {
-        console.warn('[googleImport] No se pudo persistir tokens:', err.message);
+        syncResult = await GoogleSyncService.syncGoogleToCRM(userId);
+        console.log(`[googleImport] Sincronización automática completada: ${syncResult.synced} de ${syncResult.total} contactos sincronizados`);
+      } catch (syncError) {
+        console.error('[googleImport] Error en sincronización automática:', syncError);
       }
 
-  console.log('[googleImport] Tokens recibidos, llamando People API');
-      const people = google.people({ version: 'v1', auth: oauth2Client });
-      // Obtener contactos (batch inicialmente 1000)
-      const response = await people.people.connections.list({
-        resourceName: 'people/me',
-        personFields: 'names,emailAddresses,phoneNumbers,organizations,biographies',
-        pageSize: 1000,
-      });
-      const connections = response.data.connections || [];
-      const rows = connections.map(p => {
-        const nombre = p.names && p.names.length ? (p.names[0].displayName || p.names[0].givenName || 'Sin Nombre') : 'Sin Nombre';
-        const email = p.emailAddresses && p.emailAddresses.length ? p.emailAddresses[0].value : null;
-        const telefono = p.phoneNumbers && p.phoneNumbers.length ? p.phoneNumbers[0].value : null;
-        const notas = p.biographies && p.biographies.length ? p.biographies[0].value : null;
-        return { nombre, email, telefono, notas, origen: 'google', tipo: 'lead' };
-      }).filter(r => r.email || r.telefono || (r.nombre && r.nombre !== 'Sin Nombre'));
-      console.log('[googleImport] Conexiones totales:', connections.length, 'Filtradas útiles:', rows.length);
-      const result = await ContactsService.bulkCreate(rows);
-  console.log(`[googleImport] Importación finalizada: insertados ${result.inserted}, duplicados ${result.skipped}`);
-      if (state === 'popup') {
-        // Responder con HTML que manda mensaje a la ventana que abrió el popup
-        res.send(`<!doctype html><html><head><title>Importación Google</title></head><body style=\"font-family:sans-serif;text-align:center;padding:20px;\">
-          <h3>Importación completada</h3>
-          <p>Importados: ${result.inserted} | Duplicados: ${result.skipped}</p>
+      // Si se abrió en popup, notificar al opener y cerrar
+      if (state.popup) {
+        const imported = Number(syncResult.synced || 0);
+        const skipped = Math.max(0, Number(syncResult.total || 0) - imported);
+        return res.send(`<!doctype html><html><head><title>Autorización exitosa</title></head><body style="font-family:sans-serif;text-align:center;padding:20px;">
+          <h3>¡Conexión exitosa con Google Contacts!</h3>
+          <p>Esta ventana se cerrará automáticamente…</p>
           <script>
-            (function(){
-              try { localStorage.setItem('googleImportResult', JSON.stringify({ imported:${result.inserted}, skipped:${result.skipped}, ts: Date.now() })); } catch(e) {}
-              let attempts = 0;
-              const payload = { type: 'google-import-result', imported: ${result.inserted}, skipped: ${result.skipped} };
-              const timer = setInterval(()=>{
-                attempts++;
-                try { if (window.opener) window.opener.postMessage(payload, '*'); } catch(e){}
-                if (attempts >= 5) { clearInterval(timer); setTimeout(()=> window.close(), 500); }
-              }, 250);
-            })();
+            try {
+              var payload = { type: 'google-import-result', imported: ${'${imported}'}, skipped: ${'${skipped}'}, ts: Date.now() };
+              try { localStorage.setItem('googleImportResult', JSON.stringify(payload)); } catch(_){ }
+              if (window.opener) { window.opener.postMessage(payload, '*'); }
+            } catch (_e) { /* ignore */ }
+            // Cerrar rápido; algunos navegadores requieren un pequeño retardo
+            setTimeout(function(){ window.close(); }, 300);
           </script>
-        </body></html>`);
-      } else {
-        res.json({ success:true, imported: result.inserted, skipped: result.skipped, items: result.items.slice(0,50) });
+          </body></html>`);
       }
+
+      res.json({ success: true, message: 'Autenticación exitosa', data: syncResult });
     } catch (e) {
-      console.error('Error importando contactos Google:', e.message);
-      res.status(500).json({ success:false, message:e.message });
+      console.error('[googleImport] Error en callback:', e);
+      res.status(500).send(`<h3>Error</h3><p>${e.message}</p>`);
+    }
+  }
+
+  static async syncContacts(req, res) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
+      const result = await GoogleSyncService.syncGoogleToCRM(req.user.id);
+      res.json({ 
+        success: true, 
+        message: `Sincronización completada: ${result.synced} de ${result.total} contactos actualizados`,
+        data: result
+      });
+    } catch (e) {
+      console.error('[googleImport] Error en sincronización manual:', e);
+      res.status(500).json({ success: false, message: e.message });
+    }
+  }
+
+  static async getSyncStatus(req, res) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
+      const [tokens] = await executeQuery(
+        'SELECT sync_enabled, last_sync FROM google_tokens WHERE usuario_id = ?',
+        [req.user.id]
+      );
+
+      if (!tokens) {
+        return res.json({ 
+          success: true, 
+          data: { 
+            connected: false,
+            syncEnabled: false,
+            lastSync: null
+          } 
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        data: { 
+          connected: true,
+          syncEnabled: tokens.sync_enabled,
+          lastSync: tokens.last_sync
+        } 
+      });
+    } catch (e) {
+      console.error('[googleImport] Error obteniendo estado de sincronización:', e);
+      res.status(500).json({ success: false, message: e.message });
+    }
+  }
+
+  static async createGoogleContact(req, res) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'No autenticado' });
+      }
+
+      const contactId = req.params.id;
+      const [contact] = await executeQuery('SELECT * FROM contacto WHERE id = ?', [contactId]);
+      
+      if (!contact) {
+        return res.status(404).json({ success: false, message: 'Contacto no encontrado' });
+      }
+
+      const result = await GoogleSyncService.syncContactToGoogle(req.user.id, contact);
+      res.json({ success: true, data: result });
+    } catch (e) {
+      console.error('[googleImport] Error creando contacto en Google:', e);
+      res.status(500).json({ success: false, message: e.message });
+    }
+  }
+
+  // Preview: muestra conteos y muestra de contactos de Google antes de persistir
+  static async preview(req, res) {
+    try {
+      if (!req.user) return res.status(401).json({ success:false, message:'No autenticado' });
+      const auth = await GoogleSyncService.getAuthClient(req.user.id);
+      if (!auth) return res.status(400).json({ success:false, message:'No conectado a Google' });
+      const people = google.people({ version: 'v1', auth });
+      const [connResp, otherResp] = await Promise.all([
+        people.people.connections.list({ resourceName: 'people/me', pageSize: 50, personFields: 'names,emailAddresses,phoneNumbers,organizations,userDefined,biographies,metadata' }),
+        people.otherContacts.list({ pageSize: 50, readMask: 'names,emailAddresses,phoneNumbers' })
+      ]);
+      const connections = connResp.data.connections || [];
+      const otherContacts = otherResp.data.otherContacts || [];
+      // Solo conteos; no devolver datos de ejemplo
+      let dbCount = 0;
+      try { const r = await executeQuery("SELECT COUNT(*) AS c FROM contacto WHERE origen='google'"); dbCount = r?.[0]?.c || 0; } catch(_) {
+        try { const r2 = await executeQuery("SELECT COUNT(*) AS c FROM contactos WHERE origen='google'"); dbCount = r2?.[0]?.c || 0; } catch(_) {}
+      }
+      res.json({ success:true, data: { connections: connections.length, otherContacts: otherContacts.length, dbGoogleCount: dbCount } });
+    } catch (e) {
+      console.error('[googleImport] preview error:', e?.response?.data || e.message || e);
+      res.status(500).json({ success:false, message: e.message });
     }
   }
 }
 
 module.exports = GoogleContactsController;
-
-// Crear contacto en Google con nombre/apellido/email/telefono mínimos
-module.exports.createGoogleContact = async function(req, res) {
-  try {
-    const { nombre, apellido, email, telefono } = req.body || {};
-    const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
-    console.log('[googleSync] createGoogleContact request', { userId, nombre, hasEmail: !!email, hasTelefono: !!telefono });
-    // Recuperar tokens del usuario
-    let row = null;
-    if (userId) {
-      const rows = await executeQuery('SELECT google_access_token, google_refresh_token, google_expiry FROM usuario WHERE id = ? LIMIT 1', [userId]);
-      row = rows && rows[0] ? rows[0] : null;
-    }
-    const oauth2Client = getOAuthClient();
-    if (row && (row.google_access_token || row.google_refresh_token)) {
-      oauth2Client.setCredentials({ access_token: row.google_access_token || undefined, refresh_token: row.google_refresh_token || undefined, expiry_date: row.google_expiry || undefined });
-      console.log('[googleSync] Using persisted tokens from DB');
-    } else if (savedTokens) {
-      oauth2Client.setCredentials(savedTokens);
-      console.log('[googleSync] Using in-memory tokens');
-    } else {
-      console.warn('[googleSync] No tokens available to call Google');
-      return res.status(401).json({ success:false, message:'No conectado a Google. Autoriza primero.' });
-    }
-    const people = google.people({ version: 'v1', auth: oauth2Client });
-    const resource = {
-      names: [{ givenName: nombre || '', familyName: apellido || '' }],
-      emailAddresses: email ? [{ value: email }] : undefined,
-      phoneNumbers: telefono ? [{ value: telefono }] : undefined,
-    };
-    const resp = await people.people.createContact({ requestBody: resource });
-    console.log('[googleSync] createContact OK', resp.data && resp.data.resourceName);
-    // Si el client refrescó access token, guardar nuevo token/expiry si se encuentran en credenciales
-    try {
-      const creds = oauth2Client.credentials || {};
-      if (userId && (creds.access_token || creds.expiry_date)) {
-        await executeQuery('UPDATE usuario SET google_access_token = COALESCE(?, google_access_token), google_expiry = COALESCE(?, google_expiry) WHERE id = ?', [creds.access_token || null, creds.expiry_date || null, userId]);
-      }
-    } catch(err) { console.warn('[googleSync] Could not persist refreshed token', err && err.message); }
-    return res.json({ success:true, data: { resourceName: resp.data.resourceName || null } });
-  } catch(e) {
-    console.error('[googleSync] createGoogleContact error', e && (e.response?.data || e.message || e));
-    const msg = (e && e.response && e.response.data && e.response.data.error && e.response.data.error.message) ? e.response.data.error.message : (e.message || 'Error creando contacto en Google');
-    return res.status(400).json({ success:false, message: msg });
-  }
-}

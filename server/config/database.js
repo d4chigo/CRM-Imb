@@ -21,10 +21,16 @@ async function testConnection() {
 // Función helper para ejecutar queries con manejo de errores
 async function executeQuery(query, params = []) {
   try {
-    const [results] = await pool.execute(query, params);
+    const normParams = Array.isArray(params) ? params : [params];
+    const [results] = await pool.execute(query, normParams);
     return results;
   } catch (error) {
-    console.error('Error ejecutando query:', error.message);
+    try {
+      const previewParams = Array.isArray(params) ? params : [params];
+      console.error('Error ejecutando query:', error.message, '\nSQL:', query, '\nParams:', JSON.stringify(previewParams));
+    } catch(_) {
+      console.error('Error ejecutando query:', error.message, '\nSQL:', query, '\nParams: <no serializable>');
+    }
     throw error;
   }
 }

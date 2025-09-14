@@ -6,6 +6,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLe
 import { authService } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
 import {
   Bar,
   BarChart,
@@ -25,42 +27,87 @@ export function StatsDashboard() {
   const [byAge, setByAge] = useState<StatItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  // Filtros seleccionables (sin valores preseleccionados)
-  // rangesKey: 'none' | '25-30_35-40' | 'defaultBuckets'
-  const [rangesKey, setRangesKey] = useState<string>('none')
-  // deptLimitSel: 'none' | '5' | '10' | '20' | '50'
-  const [deptLimitSel, setDeptLimitSel] = useState<string>('none')
 
-  function rangesFromKey(key: string): string | undefined {
-    if (key === 'none') return undefined
-    if (key === '25-30_35-40') return '25-30,35-40'
-    if (key === 'defaultBuckets') return undefined // sin param -> el backend usa buckets por defecto
-    return undefined
-  }
+  // Filtros (controlan qué gráficos se mostrarán)
+  const [deptLimitSel, setDeptLimitSel] = useState<string>('10')
+  // Edades: modo y rangos personalizados
+  const BONUS_MAX_AGE = 65
+  const [ageMode, setAgeMode] = useState<'default' | 'custom'>('default')
+  const [customRanges, setCustomRanges] = useState<Array<{ from: number; to: number }>>([])
+  const [ageFrom, setAgeFrom] = useState<number>(20)
+  const [ageTo, setAgeTo] = useState<number>(25)
 
+  // UI state
+  const [activeTab, setActiveTab] = useState<'sex' | 'dept' | 'age'>('sex')
+  
   function limitFromKey(key: string): number | undefined {
-    if (key === 'none') return undefined
     const n = parseInt(key, 10)
     return Number.isFinite(n) ? n : undefined
   }
 
-  async function fetchData() {
-    const rangesParam = rangesFromKey(rangesKey)
-    const limitParam = limitFromKey(deptLimitSel)
-    const depUrl = limitParam !== undefined ? `/api/stats/contacts/by-department?limit=${encodeURIComponent(limitParam)}` : `/api/stats/contacts/by-department`
-    const ageUrl = rangesParam !== undefined ? `/api/stats/contacts/by-age?ranges=${encodeURIComponent(rangesParam)}` : `/api/stats/contacts/by-age`
-    const [r1, r2, r3] = await Promise.all([
-      authService.authenticatedFetch(depUrl),
-      authService.authenticatedFetch(`/api/stats/contacts/by-sex`),
-      authService.authenticatedFetch(ageUrl)
-    ])
-    const j1 = await r1.json()
-    const j2 = await r2.json()
-    const j3 = await r3.json()
-    if (!j1.success || !j2.success || !j3.success) throw new Error('Error de API de estadísticas')
-    setByDept(j1.data)
-    setBySex(j2.data)
-    setByAge(j3.data)
+  function buildAgeRangesParam(): string | undefined {
+    if (ageMode === 'default') return undefined
+    if (!customRanges.length) return undefined
+    return customRanges.map(r => `${Math.max(20, r.from)}-${Math.min(BONUS_MAX_AGE, r.to)}`).join(',')
+  }
+
+  function addCustomRange() {
+    // Validaciones básicas
+    if (!Number.isFinite(ageFrom) || !Number.isFinite(ageTo)) return
+    if (ageFrom < 20 || ageTo < 20) return
+    if (ageFrom > BONUS_MAX_AGE || ageTo > BONUS_MAX_AGE) return
+    if (ageFrom >= ageTo) return
+    // Evitar solapamientos simples
+    const overlaps = customRanges.some(r => !(ageTo <= r.from || ageFrom >= r.to))
+    if (overlaps) return
+    const next = [...customRanges, { from: Math.floor(ageFrom), to: Math.floor(ageTo) }]
+      .sort((a,b)=> a.from - b.from)
+    setCustomRanges(next)
+  }
+
+  function removeCustomRange(idx: number) {
+    setCustomRanges(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  async function fetchInitial() {
+    const r = await authService.authenticatedFetch(`/api/stats/contacts/by-sex`)
+    const j = await r.json()
+    if (!j.success) throw new Error('Error de API de estadísticas (sexo)')
+    setBySex(j.data)
+  }
+
+  async function applyDept() {
+    try {
+      setLoading(true)
+      const limitParam = limitFromKey(deptLimitSel)
+      const depUrl = limitParam !== undefined ? `/api/stats/contacts/by-department?limit=${encodeURIComponent(limitParam)}` : `/api/stats/contacts/by-department`
+      const r = await authService.authenticatedFetch(depUrl)
+      const j = await r.json()
+      if (!j.success) throw new Error('Error de API (departamento)')
+      setByDept(j.data)
+      setActiveTab('dept')
+    } catch (e) {
+      setError((e as any)?.message || 'Error cargando por departamento')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function applyAge() {
+    try {
+      setLoading(true)
+      const rangesParam = buildAgeRangesParam()
+      const ageUrl = rangesParam ? `/api/stats/contacts/by-age?ranges=${encodeURIComponent(rangesParam)}` : `/api/stats/contacts/by-age`
+      const r = await authService.authenticatedFetch(ageUrl)
+      const j = await r.json()
+      if (!j.success) throw new Error('Error de API (edades)')
+      setByAge(j.data)
+      setActiveTab('age')
+    } catch (e) {
+      setError((e as any)?.message || 'Error cargando por rangos de edad')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -68,18 +115,7 @@ export function StatsDashboard() {
     async function load() {
       try {
         setLoading(true)
-        // Cargar sin filtros aplicados (no enviar params)
-        const [r1, r2, r3] = await Promise.all([
-          authService.authenticatedFetch(`/api/stats/contacts/by-department`),
-          authService.authenticatedFetch(`/api/stats/contacts/by-sex`),
-          authService.authenticatedFetch(`/api/stats/contacts/by-age`)
-        ])
-        const j1 = await r1.json()
-        const j2 = await r2.json()
-        const j3 = await r3.json()
-        if (!j1.success || !j2.success || !j3.success) throw new Error('Error de API de estadísticas')
-        if (!mounted) return
-        setByDept(j1.data); setBySex(j2.data); setByAge(j3.data)
+        await fetchInitial()
       } catch (e: any) {
         if (!mounted) return
         setError(e?.message || 'Error cargando estadísticas')
@@ -105,151 +141,176 @@ export function StatsDashboard() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-          <CardDescription>Selecciona filtros y presiona Aplicar</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Rangos de edad</label>
-              <Select value={rangesKey} onValueChange={setRangesKey}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sin filtro" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Presets</SelectLabel>
-                    <SelectItem value="none">Sin filtro</SelectItem>
-                    <SelectItem value="defaultBuckets">Buckets por defecto</SelectItem>
-                    <SelectItem value="25-30_35-40">25-30 y 35-40</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Máx. departamentos</label>
-              <Select value={deptLimitSel} onValueChange={setDeptLimitSel}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Sin límite" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Top N</SelectLabel>
-                    <SelectItem value="none">Sin límite</SelectItem>
-                    <SelectItem value="5">5</SelectItem>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Button onClick={async () => {
-                try {
-                  setLoading(true)
-                  setError(null)
-                  await fetchData()
-                } catch (e: any) {
-                  setError(e?.message || 'Error cargando estadísticas')
-                } finally {
-                  setLoading(false)
-                }
-              }}>Aplicar</Button>
-            </div>
-          </div>
-          {/* Visibilidad de gráficos */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked id="vis-sex" onChange={(e)=>{
-              const el = document.getElementById('chart-sex'); if (el) (el as HTMLDivElement).style.display = e.target.checked? 'block':'none'
-            }} /> Mostrar "Por Sexo"</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked id="vis-dept" onChange={(e)=>{
-              const el = document.getElementById('chart-dept'); if (el) (el as HTMLDivElement).style.display = e.target.checked? 'block':'none'
-            }} /> Mostrar "Por Departamento"</label>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" defaultChecked id="vis-age" onChange={(e)=>{
-              const el = document.getElementById('chart-age'); if (el) (el as HTMLDivElement).style.display = e.target.checked? 'block':'none'
-            }} /> Mostrar "Por Rangos de Edad"</label>
-          </div>
-          {/* Enlaces útiles */}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <a href="https://www.mivivienda.com.pe/PORTALWEB/usuario-busca-viviendas/apoyo-habitacional-previo.aspx" target="_blank" rel="noopener noreferrer">Verificar bono recibido</a>
-            </Button>
-            <Button asChild variant="outline">
-              <a href="https://www.mivivienda.com.pe/PORTALWEB/usuario-busca-viviendas/estados-tramite.aspx" target="_blank" rel="noopener noreferrer">Estado del trámite (programa)</a>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      {/* Charts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card id="chart-sex" className="col-span-1 lg:col-span-1">
-          <CardHeader>
-            <CardTitle>Por Sexo</CardTitle>
-            <CardDescription>Distribución de contactos por sexo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={{}} className="h-72">
-              <ResponsiveContainer>
-                <PieChart>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Pie
-                    data={bySex}
-                    dataKey="count"
-                    nameKey="label"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    label
-                  />
-                  <ChartLegend content={<ChartLegendContent />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-
-      <Card id="chart-dept" className="col-span-1 lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Por Departamento</CardTitle>
-          <CardDescription>De dónde son mis clientes</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={{}}
-            className="h-72">
-            <BarChart data={byDept}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" interval={0} angle={-25} textAnchor="end" height={60} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar dataKey="count" fill="#3B82F6" radius={[4,4,0,0]} />
-            </BarChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
-
-      <Card id="chart-age" className="col-span-1 lg:col-span-3">
-        <CardHeader>
-          <CardTitle>Por Rangos de Edad</CardTitle>
-          <CardDescription>Rangos configurables: 25-30, 35-40</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ChartContainer config={{}}
-            className="h-80">
-            <BarChart data={byAge}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Bar dataKey="count" fill="#10B981" radius={[4,4,0,0]} />
-            </BarChart>
-          </ChartContainer>
-        </CardContent>
-      </Card>
+      {/* Acciones / enlaces útiles */}
+      <div className="flex flex-wrap gap-2">
+        <Button asChild variant="outline">
+          <a href="https://www.mivivienda.com.pe/PORTALWEB/usuario-busca-viviendas/apoyo-habitacional-previo.aspx" target="_blank" rel="noopener noreferrer">Verificar bono recibido</a>
+        </Button>
+        <Button asChild variant="outline">
+          <a href="https://www.mivivienda.com.pe/PORTALWEB/usuario-busca-viviendas/estados-tramite.aspx" target="_blank" rel="noopener noreferrer">Estado del trámite (programa)</a>
+        </Button>
       </div>
+
+      {/* Tabs para las estadísticas */}
+      <Tabs value={activeTab} onValueChange={(v)=> setActiveTab(v as any)} className="w-full">
+        <TabsList className="mb-2">
+          <TabsTrigger value="sex">Por Sexo</TabsTrigger>
+          <TabsTrigger value="dept">Por Departamento</TabsTrigger>
+          <TabsTrigger value="age">Por Rangos de Edad</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="sex">
+          <Card className="col-span-1">
+            <CardHeader>
+              <CardTitle>Por Sexo</CardTitle>
+              <CardDescription>Distribución de contactos por sexo</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="h-72">
+                <ResponsiveContainer>
+                  <PieChart>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Pie
+                      data={bySex}
+                      dataKey="count"
+                      nameKey="label"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      fill="#8884d8"
+                      label
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="dept">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Por Departamento</CardTitle>
+                  <CardDescription>De dónde son mis clientes</CardDescription>
+                </div>
+                <div className="flex items-end gap-2 w-full sm:w-auto">
+                  <div className="min-w-44">
+                    <label className="block text-xs text-gray-600 mb-1">Top N a mostrar</label>
+                    <Select value={deptLimitSel} onValueChange={setDeptLimitSel}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Top 10" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="5">Top 5</SelectItem>
+                          <SelectItem value="10">Top 10</SelectItem>
+                          <SelectItem value="20">Top 20</SelectItem>
+                          <SelectItem value="50">Top 50</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={applyDept}>Aplicar</Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {byDept.length === 0 ? (
+                <div className="text-sm text-gray-500">Selecciona un Top y pulsa "Aplicar" para cargar este gráfico.</div>
+              ) : (
+                <ChartContainer config={{}} className="h-72">
+                  <BarChart data={byDept}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" interval={0} angle={-25} textAnchor="end" height={60} />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="count" fill="#3B82F6" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="age">
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <CardTitle>Por Rangos de Edad</CardTitle>
+                  <CardDescription>Rangos configurables</CardDescription>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full sm:w-auto">
+                  <div className="min-w-56">
+                    <label className="block text-xs text-gray-600 mb-1">Modo</label>
+                    <Select value={ageMode} onValueChange={(v)=> setAgeMode(v as 'default'|'custom')}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Buckets por defecto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Presets</SelectLabel>
+                          <SelectItem value="default">Buckets por defecto</SelectItem>
+                          <SelectItem value="custom">Personalizado</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {ageMode === 'custom' && (
+                    <div className="flex flex-col sm:flex-row items-end gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Desde</label>
+                        <Input type="number" min={20} max={BONUS_MAX_AGE} value={ageFrom} onChange={e=> setAgeFrom(parseInt(e.target.value||'20',10))} className="w-24" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-600 mb-1">Hasta</label>
+                        <Input type="number" min={20} max={BONUS_MAX_AGE} value={ageTo} onChange={e=> setAgeTo(parseInt(e.target.value||'25',10))} className="w-24" />
+                      </div>
+                      <Button variant="outline" onClick={addCustomRange}>Agregar</Button>
+                    </div>
+                  )}
+
+                  <Button onClick={applyAge}>Aplicar</Button>
+                </div>
+              </div>
+
+              {ageMode === 'custom' && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {customRanges.length === 0 ? (
+                    <span className="text-xs text-gray-500">Agrega uno o más rangos, p. ej. 20–25, 26–30… (máx. {BONUS_MAX_AGE}).</span>
+                  ) : (
+                    customRanges.map((r, i) => (
+                      <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded inline-flex items-center gap-2">
+                        {r.from}–{r.to}
+                        <button className="text-gray-500 hover:text-gray-700" onClick={()=> removeCustomRange(i)}>✕</button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {byAge.length === 0 ? (
+                <div className="text-sm text-gray-500">Selecciona el modo y pulsa "Aplicar" para ver este gráfico.</div>
+              ) : (
+                <ChartContainer config={{}} className="h-80">
+                  <BarChart data={byAge}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Bar dataKey="count" fill="#10B981" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

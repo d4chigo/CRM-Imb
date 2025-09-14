@@ -1,14 +1,15 @@
 const { executeQuery } = require('../config/database');
+const { inferSexByName } = require('../services/genderService');
 
+// Detecta la tabla real de contactos (singular o plural)
 async function resolveContactsTable() {
   try { await executeQuery('SELECT 1 FROM contacto LIMIT 1'); return 'contacto'; } catch(_) {}
   return 'contactos';
 }
-const { inferSexByName } = require('../services/genderService');
 
 // Utilidad para parsear rangos de edad desde query string: "25-30,35-40"
 function parseRanges(rangesStr) {
-  if (!rangesStr) return [ [25,30], [35,40] ]; // valores por defecto solicitados
+  if (!rangesStr) return [ [25,30], [35,40] ];
   const parts = rangesStr.split(',').map(s => s.trim()).filter(Boolean);
   const ranges = [];
   for (const p of parts) {
@@ -16,12 +17,20 @@ function parseRanges(rangesStr) {
     if (m) {
       const a = parseInt(m[1], 10);
       const b = parseInt(m[2], 10);
-      if (!Number.isNaN(a) && !Number.isNaN(b) && a <= b) {
-        ranges.push([a,b]);
-      }
+      if (!Number.isNaN(a) && !Number.isNaN(b) && a <= b) ranges.push([a,b]);
     }
   }
   return ranges.length ? ranges : [ [25,30], [35,40] ];
+}
+
+// Intenta obtener edades desde columna "edad"; si falla, usa TIMESTAMPDIFF(fecha_nacimiento)
+async function fetchAges(table) {
+  try {
+    const rows = await executeQuery(`SELECT edad FROM ${table} WHERE edad IS NOT NULL`);
+    if (Array.isArray(rows) && rows.length) return rows.map(r => ({ edad: r.edad }));
+  } catch(_) { /* fallback abajo */ }
+  const calc = await executeQuery(`SELECT TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE()) AS edad FROM ${table} WHERE fecha_nacimiento IS NOT NULL`);
+  return calc;
 }
 
 class StatsController {
@@ -61,7 +70,6 @@ class StatsController {
       } else {
         rows = await executeQuery(baseSql);
       }
-      // Mapear etiquetas legibles
       const mapped = rows.map(r => ({
         label: r.label === 'M' ? 'Masculino' : r.label === 'F' ? 'Femenino' : r.label === 'O' ? 'Otro' : 'Sin dato',
         count: r.count,
@@ -77,17 +85,12 @@ class StatsController {
   static async contactsByAgeRanges(req, res) {
     try {
       const table = await resolveContactsTable();
-      const ages = await executeQuery(
-        `SELECT TIMESTAMPDIFF(YEAR, fecha_nacimiento, CURDATE()) AS edad
-         FROM ${table}
-         WHERE fecha_nacimiento IS NOT NULL`
-      );
+      const ages = await fetchAges(table);
       let buckets;
       if (req.query.ranges) {
         const ranges = parseRanges(req.query.ranges);
         buckets = ranges.map(([a,b]) => ({ label: `${a}-${b}`, from: a, to: b, count: 0 }));
       } else {
-        // buckets por defecto (no filtrados por usuario): 0-17, 18-24, 25-34, 35-44, 45-54, 55-64, 65+
         buckets = [
           { label: '0-17', from: 0, to: 17, count: 0 },
           { label: '18-24', from: 18, to: 24, count: 0 },
@@ -99,19 +102,16 @@ class StatsController {
         ];
       }
 
-      // Contar nulos por separado
-      const nullCountRows = await executeQuery(
-        `SELECT COUNT(*) AS c FROM ${table} WHERE fecha_nacimiento IS NULL`
-      );
-      const sinDato = nullCountRows[0]?.c || 0;
+      let sinDato = 0;
+      try {
+        const nullCountRows = await executeQuery(`SELECT COUNT(*) AS c FROM ${table} WHERE fecha_nacimiento IS NULL`);
+        sinDato = nullCountRows[0]?.c || 0;
+      } catch(_) {}
 
       for (const row of ages) {
         const e = row.edad;
         for (const b of buckets) {
-          if (typeof e === 'number' && e >= b.from && e <= b.to) {
-            b.count++;
-            break;
-          }
+          if (typeof e === 'number' && e >= b.from && e <= b.to) { b.count++; break; }
         }
       }
       const data = buckets.map(({ label, count }) => ({ label, count }));
@@ -126,17 +126,15 @@ class StatsController {
 
   static async inferSexAndUpdate(req, res) {
     try {
-      // Obtener contactos sin sexo definido o marcado como 'O'
+      const table = await resolveContactsTable();
       const rows = await executeQuery(
-        `SELECT id, nombre_completo, sexo
-         FROM contactos
-         WHERE sexo IS NULL OR sexo = '' OR sexo = 'O'`
+        `SELECT id, nombre_completo, sexo FROM ${table} WHERE sexo IS NULL OR sexo = '' OR sexo = 'O'`
       );
       let updated = 0;
       for (const r of rows) {
         const inferred = inferSexByName(r.nombre_completo);
         if (inferred && inferred !== r.sexo) {
-          await executeQuery(`UPDATE contactos SET sexo = ? WHERE id = ?`, [inferred, r.id]);
+          await executeQuery(`UPDATE ${table} SET sexo = ? WHERE id = ?`, [inferred, r.id]);
           updated++;
         }
       }

@@ -46,13 +46,28 @@ CREATE TABLE IF NOT EXISTS `contacto` (
   `apellido` VARCHAR(120),
   `email` VARCHAR(160),
   `telefono` VARCHAR(40),
+  `dni` VARCHAR(20) UNIQUE,
+  `sexo` ENUM('M', 'F', 'O') COMMENT 'M: Masculino, F: Femenino, O: Otro',
+  `fecha_nacimiento` DATE,
   `tipo` ENUM('lead','prospecto','cliente') DEFAULT 'lead',
   `departamento` VARCHAR(160),
   `medio_contacto` VARCHAR(80),
   `observaciones` TEXT,
+  `google_contact_id` VARCHAR(255) NULL,
+  `google_resource_name` VARCHAR(255) NULL,
+  `last_synced_with_google` DATETIME NULL,
   `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `actualizado_en` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_email` (`email`),
+  INDEX `idx_telefono` (`telefono`),
+  INDEX `idx_dni` (`dni`),
+  INDEX `idx_sexo` (`sexo`),
+  INDEX `idx_tipo` (`tipo`),
+  INDEX `idx_departamento` (`departamento`),
+  INDEX `idx_creado_en` (`creado_en`),
+  INDEX `idx_google_contact_id` (`google_contact_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Catálogo de cotizaciones (servicio para inmobiliaria)
 CREATE TABLE IF NOT EXISTS `cotizacion` (
@@ -117,6 +132,24 @@ CREATE TABLE IF NOT EXISTS `actividad` (
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_act_oportunidad` FOREIGN KEY (`oportunidad_id`) REFERENCES `oportunidad`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Tabla para tokens de Google por usuario
+CREATE TABLE IF NOT EXISTS `google_tokens` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `usuario_id` INT UNSIGNED NOT NULL,
+  `access_token` TEXT NOT NULL,
+  `refresh_token` TEXT,
+  `scope` TEXT,
+  `token_type` VARCHAR(50),
+  `expiry_date` BIGINT,
+  `sync_enabled` BOOLEAN DEFAULT TRUE,
+  `last_sync` DATETIME,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_usuario` (`usuario_id`),
+  CONSTRAINT `fk_gt_usuario` FOREIGN KEY (`usuario_id`) REFERENCES `usuario`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =================================================================
 -- DATOS BÁSICOS NECESARIOS

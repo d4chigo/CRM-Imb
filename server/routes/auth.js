@@ -1,7 +1,7 @@
 // Rutas de autenticación para CRM Inmobiliario
 const express = require('express');
 const AuthController = require('../controllers/authController');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { isAuthenticated, requireAdmin } = require('../middleware/auth');
 const { loginLimiter } = require('../middleware/security');
 
 const router = express.Router();
@@ -29,14 +29,14 @@ router.post('/refresh', AuthController.refresh);
 // Logout del usuario actual
 // POST /api/auth/logout
 router.post('/logout', 
-  authenticateToken, // Verificar token válido
+  isAuthenticated, // Verificar token válido
   AuthController.logout
 );
 
 // Obtener información del usuario actual
 // GET /api/auth/me
 router.get('/me', 
-  authenticateToken, // Verificar token válido
+  isAuthenticated, // Verificar token válido
   AuthController.me
 );
 
@@ -47,7 +47,7 @@ router.get('/me',
 // Registrar nuevo usuario (solo administradores)
 // POST /api/auth/register
 router.post('/register',
-  authenticateToken, // Verificar token válido
+  isAuthenticated, // Verificar token válido
   requireAdmin, // Solo administradores pueden crear usuarios
   AuthController.registerValidation, // Validación de datos
   AuthController.register

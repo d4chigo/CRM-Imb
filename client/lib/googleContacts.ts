@@ -1,3 +1,5 @@
+import { authService } from '@/lib/auth'
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 function authHeaders(): Record<string,string> {
@@ -19,16 +21,38 @@ export async function upsertGoogleContact(payload: { nombre?: string; apellido?:
 }
 
 export async function getGoogleContactsAuthUrl(): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/api/google/contacts/auth-url`, { headers: { ...authHeaders() } });
+  // Usar el fetch autenticado para que refresque el token si está expirado
+  const res = await authService.authenticatedFetch(`/api/google/contacts/auth-url`, { method: 'GET' });
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(()=> '');
     console.error('[googleImport] fallo auth-url', res.status, text);
-    throw new Error('No se pudo obtener URL de Google');
+    try {
+      const json = JSON.parse(text);
+      throw new Error(`[googleImport] fallo auth-url ${res.status} ${JSON.stringify(json)}`);
+    } catch {
+      throw new Error('No se pudo obtener URL de Google');
+    }
   }
-  if (!res.ok) throw new Error('No se pudo obtener URL de Google');
   const data = await res.json();
   console.log('[googleImport] auth-url obtenida');
   return data.url;
+}
+
+export async function getGoogleSyncStatus(): Promise<{ connected: boolean; syncEnabled: boolean; lastSync: string | null }>{
+  const res = await authService.authenticatedFetch(`/api/google/contacts/sync/status`, { method: 'GET' });
+  if (!res.ok) throw new Error('No se pudo obtener estado de Google');
+  const json = await res.json();
+  return json.data || { connected: false, syncEnabled: false, lastSync: null };
+}
+
+export async function manualGoogleSync(): Promise<{ synced:number; total:number }>{
+  const res = await authService.authenticatedFetch(`/api/google/contacts/sync`, { method: 'POST' });
+  if (!res.ok) {
+    const text = await res.text().catch(()=> '');
+    throw new Error(text || 'No se pudo sincronizar con Google');
+  }
+  const json = await res.json();
+  return json.data || { synced: 0, total: 0 };
 }
 
 export function openGoogleImportPopup(url: string) {

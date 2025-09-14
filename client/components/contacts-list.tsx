@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge } from "lucide-react"
+import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge, RefreshCw, CheckCircle2, AlertTriangle, Users } from "lucide-react"
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 // Nuevo dialog para edición
 import { EditContactDialog, EditContactFormValues } from '@/components/forms/EditContactDialog'
@@ -16,7 +16,7 @@ import { usePipeline } from '@/contexts/PipelineContext'
 import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO, listDuplicateContacts, mergeContacts, bulkTagContacts, bulkMoveContactsToPipeline } from "@/lib/contacts"
 import { createOpportunityFromContact } from '@/lib/opportunities'
 import { useAuth } from '@/contexts/AuthContext'
-import { getGoogleContactsAuthUrl, openGoogleImportPopup, createGoogleContact } from "@/lib/googleContacts"
+import { getGoogleContactsAuthUrl, openGoogleImportPopup, createGoogleContact, getGoogleSyncStatus, manualGoogleSync } from "@/lib/googleContacts"
 import { useToast } from '@/hooks/use-toast'
 import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
 
@@ -39,6 +39,7 @@ export function ContactsList() {
   const [creatingOppForId, setCreatingOppForId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [importFailed, setImportFailed] = useState<string | null>(null)
   const [lastImport, setLastImport] = useState<{ imported: number; skipped: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -47,10 +48,24 @@ export function ContactsList() {
   const [bubblePos, setBubblePos] = useState<{ top:number; left:number } | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewContact, setPreviewContact] = useState<ContactDTO | null>(null)
+  const [selectAllMode, setSelectAllMode] = useState<boolean>(false)
   // Refs para manejo robusto del popup y watchers
   const popupRef = useRef<Window | null>(null)
   const watcherRef = useRef<number | null>(null)
   const timeoutRef = useRef<number | null>(null)
+  // Estado Google conectado
+  const [googleStatus, setGoogleStatus] = useState<{ connected: boolean; syncEnabled: boolean; lastSync: string | null }>({ connected:false, syncEnabled:false, lastSync:null })
+  // Duplicados (preview y fusión en lote)
+  const [dupsOpen, setDupsOpen] = useState(false)
+  const [dupGroups, setDupGroups] = useState<Array<{ by:string; value:string; count:number; members: ContactDTO[] }>>([])
+  // Separar por tipo (Clientes vs No clientes)
+  const [splitByType, setSplitByType] = useState(false)
+
+  // Calcular estilo seguro para el bubble dentro del viewport
+  const bubbleStyle: React.CSSProperties | undefined = bubblePos ? {
+    top: Math.max(8, Math.min(bubblePos.top, window.scrollY + window.innerHeight - 260)),
+    left: Math.max(8, Math.min(bubblePos.left, window.scrollX + window.innerWidth - 360))
+  } : undefined
 
   // ---- Helpers globales dentro del componente ----
   function clearWatchers() {
@@ -67,11 +82,13 @@ export function ContactsList() {
     setSelectedIds(prev => {
       const n = new Set(prev)
       if (n.has(id)) n.delete(id); else n.add(id)
+      // Si ahora hay 2 o más, ocultar bubble y salir de selectAllMode=false explícitamente
+      if (n.size >= 2) { setBubblePos(null); setSelectAllMode(false) }
       return n
     })
   }
 
-  function clearSelection() { setSelectedIds(new Set()); setBubblePos(null) }
+  function clearSelection() { setSelectedIds(new Set()); setBubblePos(null); setSelectAllMode(false) }
 
   async function bulkDelete() {
     if (!selectedIds.size) return
@@ -123,20 +140,25 @@ export function ContactsList() {
   }
   function finalizeImport(imported:number, skipped:number) {
     setImporting(false)
+    setImportFailed(null)
     clearWatchers()
-  try { popupRef.current?.close() } catch(_) {}
-  popupRef.current = null
-  setLastImport({ imported, skipped })
-    toast({ title: 'Importación completada', description: `Importados: ${imported} | Duplicados: ${skipped}` })
-  // Refrescar a la primera página para ver lo nuevo
-  loadContacts({ page: 1 })
+    try { popupRef.current?.close() } catch(_) {}
+    popupRef.current = null
+    setLastImport({ imported, skipped })
+    // Toast más visible
+    toast({ title: 'Importación de Google', description: `Importados: ${imported} · Duplicados: ${skipped}`, variant: 'default' })
+    // Actualizar estado de conexión
+    getGoogleSyncStatus().then(setGoogleStatus).catch(()=>{})
+    // Refrescar a la primera página para ver lo nuevo
+    loadContacts({ page: 1 })
   }
   function failImport(msg:string) {
     setImporting(false)
+    setImportFailed(msg || 'Fallo en importación')
     clearWatchers()
-  try { popupRef.current?.close() } catch(_) {}
-  popupRef.current = null
-    toast({ title: 'Importación', description: msg, variant: 'destructive' })
+    try { popupRef.current?.close() } catch(_) {}
+    popupRef.current = null
+    toast({ title: 'Importación fallida', description: msg, variant: 'destructive' })
   }
   function checkLocalStorageFallback() {
     try {
@@ -175,6 +197,7 @@ export function ContactsList() {
   useEffect(() => { const t = setTimeout(()=> loadContacts({ page: 1, search: searchTerm }), 250); return ()=> clearTimeout(t) }, [searchTerm])
   useEffect(() => { loadContacts({ page: 1, type: selectedType }) }, [selectedType])
   useEffect(() => { loadContacts({ page }) }, [page])
+  useEffect(() => { getGoogleSyncStatus().then(setGoogleStatus).catch(()=>{}) }, [])
 
   // Listener para mensaje de popup de importación
   useEffect(() => {
@@ -269,16 +292,38 @@ export function ContactsList() {
   }
 
   // --- Manejo edición ---
+  // Sanea un patch antes de enviarlo al backend (no mandar strings vacíos ni undefined)
+  function sanitizePatch<T extends Record<string, any>>(patch: T): Partial<T> {
+    const out: Partial<T> = {}
+    for (const [k, v] of Object.entries(patch || {})) {
+      if (v === undefined) continue
+      if (typeof v === 'string' && v.trim() === '') continue
+      if (k === 'tipo' && typeof v === 'string') {
+        const t = v.toLowerCase().trim()
+        if (t === 'lead' || t === 'prospecto' || t === 'cliente') (out as any)[k] = t as any
+        else continue
+      } else {
+        (out as any)[k] = v as any
+      }
+    }
+    return out
+  }
+
   async function handleUpdateContact(id: number, data: EditContactFormValues) {
     try {
-      const updated = await updateContact(id, data)
-      // Actualizamos estado local sin refetch completo
+      const patch = sanitizePatch(data)
+      const updated = await updateContact(id, patch)
       setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updated } : c))
-      // Crear en Google si está autorizado (por ahora solo en creación; edición futura como upsert)
-      try { await createGoogleContact({ nombre: data.nombre || updated.nombre, apellido: (updated as any).apellido, email: data.email || updated.email, telefono: data.telefono || updated.telefono }) } catch(_) {}
+      try { await createGoogleContact({ nombre: patch.nombre || updated.nombre, apellido: (updated as any).apellido, email: patch.email || updated.email, telefono: patch.telefono || updated.telefono }) } catch(_) {}
+      toast({ title: 'Contacto actualizado', description: `Tipo: ${(updated as any).tipo || patch.tipo || ''}` })
     } catch(e:any) {
-      toast({ title: 'Error', description: e.message || 'No se pudo actualizar', variant: 'destructive' })
-      throw e
+      let msg = e?.message || 'No se pudo actualizar'
+      const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
+      let status = ''
+      if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/, '') }
+      if (status === '400') msg = msg || 'Datos inválidos'
+      if (status === '404') msg = msg || 'Contacto no encontrado'
+      toast({ title: 'Error actualizando', description: msg, variant: 'destructive' })
     }
   }
 
@@ -299,7 +344,7 @@ export function ContactsList() {
       const statusMatch = raw.match(/\|STATUS:(\d{3})$/)
       if (statusMatch) {
         status = statusMatch[1]
-        raw = raw.replace(/\|STATUS:\d{3}$/,'')
+        raw = raw.replace(/\|STATUS:\d{3}$/, '')
       }
       let finalMsg = raw
       if (status === '403') finalMsg = 'No autorizado para eliminar'
@@ -311,8 +356,139 @@ export function ContactsList() {
     }
   }
 
+  // Seleccionar todos (página actual)
+  function selectAllOnPage() {
+    const ids = filteredContacts.map(c => c.id!).filter(Boolean)
+    setSelectedIds(new Set(ids))
+    setBubblePos(null)
+    setSelectAllMode(true)
+    toast({ title: 'Seleccionados', description: `${ids.length} contacto(s)` })
+  }
+
+  // Agrupación por tipo (Clientes vs No clientes)
+  function renderContactsGrid(list: ContactDTO[]) {
+    if (!splitByType) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {list.map(c => renderCard(c))}
+        </div>
+      )
+    }
+    const clientes = list.filter(c => (c.tipo || '').toLowerCase() === 'cliente')
+    const otros = list.filter(c => (c.tipo || '').toLowerCase() !== 'cliente')
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2"><Users className="h-4 w-4"/><h4 className="font-semibold">Clientes</h4><span className="text-xs text-gray-500">{clientes.length}</span></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {clientes.map(c => renderCard(c))}
+        </div>
+        <div className="flex items-center gap-2 pt-2"><Users className="h-4 w-4"/><h4 className="font-semibold">Contactos</h4><span className="text-xs text-gray-500">{otros.length}</span></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {otros.map(c => renderCard(c))}
+        </div>
+      </div>
+    )
+  }
+
+  function renderCard(c: ContactDTO) {
+    return (
+      <Card key={c.id} className="border border-gray-200 group">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-base font-semibold">
+            <span className="truncate flex items-center gap-2" title={c.nombre}>
+              <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
+              <button type="button" className="text-left hover:underline" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
+                {c.nombre}
+              </button>
+            </span>
+            <div className="flex items-center gap-2">
+              <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
+                  const phone = (c.telefono || '').replace(/\D/g,'')
+                  if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
+                  const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
+                  const url = `https://wa.me/${phone}?text=${msg}`
+                  window.open(url, '_blank')
+                }}>
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
+                  const title = encodeURIComponent(`Llamada con ${c.nombre}`)
+                  const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
+                  const start = new Date(Date.now() + 60*60*1000)
+                  const end = new Date(start.getTime() + 30*60*1000)
+                  const fmt = (d:Date)=> d.toISOString().replace(/[-:]|\..*/g,'')
+                  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
+                  window.open(url, '_blank')
+                }}>
+                  <CalendarIcon className="h-4 w-4" />
+                </Button>
+                {/* Crear oportunidad en pipeline (persistente en backend) */}
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
+                  try {
+                    if (creatingOppForId) return;
+                    setCreatingOppForId(c.id!)
+                    // Primero persistimos en backend como oportunidad
+                    const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
+                    // Luego reflejamos en UI local (etapa contacto_inicial)
+                    console.log('[Pipeline] creando oportunidad desde contacto', opp)
+                    addOpportunity('contacto_inicial', {
+                      id: String(opp.id), // usar id backend para permitir persistir movimientos
+                      clientName: opp.nombreCliente || c.nombre,
+                      serviceName: 'Cotización',
+                      agent: 'Sin asignar',
+                      value: opp.valorUsd || 0,
+                      probability: opp.probabilidad || 0,
+                      closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10),
+                      phone: opp.telefono || c.telefono || '',
+                      email: opp.email || c.email || ''
+                    })
+                    // Actualizar tipo del contacto a 'cliente' (backend + UI)
+                    try {
+                      await updateContact(c.id!, { tipo: 'cliente' })
+                      setContacts(prev => prev.map(x => x.id === c.id ? { ...x, tipo: 'cliente' } : x))
+                    } catch(_) { /* no bloquear por este fallo */ }
+                    toast({ title: 'Oportunidad creada', description: c.nombre })
+                    // Cambiar automáticamente a la pestaña pipeline para mostrar la nueva oportunidad
+                    setActiveTab('pipeline')
+                    console.log('[Pipeline] estado añadido, navegando a pipeline')
+                  } catch(e:any) {
+                    let msg = e.message || 'No se pudo crear oportunidad'
+                    const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
+                    let status = ''
+                    if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/, '') }
+                    if (status === '401') msg = 'Sesión expirada o no autenticado'
+                    if (status === '403') msg = 'Sin permisos para crear oportunidades'
+                    toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
+                    console.error('[Pipeline] error creando oportunidad', status, e)
+                  } finally { setCreatingOppForId(null) }
+                }}>
+                  <Workflow className="h-4 w-4" />
+                </Button>
+                {/* Botón de eliminar visible para todos; el backend restringe a admin y el handler muestra mensaje si no tiene permisos */}
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
+                  {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </CardTitle>
+          <CardDescription className="text-xs text-gray-500">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
+        </CardHeader>
+        {c.notas && <CardContent className="pt-0 text-xs text-gray-600 whitespace-pre-line">{c.notas}</CardContent>}
+      </Card>
+    )
+  }
+
+  const showBottomBar = selectedIds.size > 0
+  const showMultiPanel = false
+  const showBubble = false
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" style={{ paddingBottom: showBottomBar ? 110 : undefined }}>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>
@@ -320,8 +496,14 @@ export function ContactsList() {
           </h2>
           <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
         </div>
-  <div className="flex gap-2 items-center">
-      <Button variant="outline" disabled={importing} onClick={async () => {
+        <div className="flex gap-2 items-center">
+          {/* Indicador de conexión Google */}
+          {googleStatus.connected ? (
+            <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1"/>Google conectado</Badge>
+          ) : (
+            <Badge className="bg-gray-400"><AlertTriangle className="h-3 w-3 mr-1"/>Google no conectado</Badge>
+          )}
+          <Button variant="outline" disabled={importing} onClick={async () => {
             if (importing) return;
             const popup = openGoogleImportPopup('about:blank');
             popupRef.current = popup;
@@ -367,64 +549,29 @@ export function ContactsList() {
             {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             {importing ? 'Importando…' : 'Importar Google'}
           </Button>
+          {/* Botón Reintentar cuando falla, sin reabrir popup: dispara sync manual */}
+          {importFailed && (
+            <Button variant="outline" onClick={async ()=>{
+              try {
+                const res = await manualGoogleSync();
+                toast({ title: 'Reintento de sincronización', description: `Importados: ${res.synced} · Duplicados: ${Math.max(0, res.total - res.synced)}` })
+                setImportFailed(null)
+                await loadContacts({ page: 1 })
+              } catch(e:any) {
+                toast({ title:'Sigue fallando', description: e.message || 'No se pudo sincronizar', variant: 'destructive' })
+              }
+            }}><RefreshCw className="h-4 w-4 mr-2"/>Reintentar</Button>
+          )}
           {lastImport && (
-            <span className="text-xs text-gray-500">
-              Última importación: +{lastImport.imported} · duplicados {lastImport.skipped}
+            <span className="text-xs text-gray-600">
+              Última importación: <b>+{lastImport.imported}</b> · duplicados {lastImport.skipped}
             </span>
           )}
-          <Button variant="outline" onClick={async ()=>{
-            try {
-              const groups = await listDuplicateContacts()
-              if (!groups.length) { toast({ title:'Duplicados', description:'No se encontraron duplicados' }); return }
-              const g = groups[0]
-              const [primary, ...dups] = g.members
-              const proceed = window.confirm(`Se encontraron duplicados por ${g.by}: ${g.value}\nFusionar el más antiguo con ${dups.length} duplicado(s)?`)
-              if (!proceed) return
-              for (const d of dups) { await mergeContacts(primary.id!, d.id!) }
-              toast({ title:'Fusión completada', description:`Grupo ${g.by}: ${g.value}` })
-              loadContacts({ page: 1 })
-            } catch(e:any) {
-              toast({ title:'Error', description: e.message || 'No se pudo obtener duplicados', variant:'destructive' })
-            }
-          }}>
-            <Merge className="h-4 w-4 mr-2" />Duplicados
-          </Button>
           <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
             <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
           </Button>
         </div>
       </div>
-
-      {selectedIds.size > 0 && bubblePos && (
-        <div className="fixed z-40" style={{ top: bubblePos.top, left: bubblePos.left }}>
-          <div className="rounded-lg shadow-lg border bg-white p-3 w-[320px]">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm">Seleccionados: <b>{selectedIds.size}</b></div>
-              <Button variant="ghost" size="sm" onClick={clearSelection}>Limpiar</Button>
-            </div>
-            <div className="space-y-2">
-              <div>
-                <label className="text-xs font-medium text-gray-600">Etiqueta</label>
-                <select value={bulkEtiqueta} onChange={e=>setBulkEtiqueta(e.target.value)} className="mt-1 w-full border rounded-md h-8 px-2 bg-white text-sm">
-                  <option value="">Selecciona…</option>
-                  <option value="Techo Propio">Techo Propio</option>
-                  <option value="Credito Mivivienda">Credito Mivivienda</option>
-                  <option value="Terreno en Captacion">Terreno en Captacion</option>
-                  <option value="Tasaciones">Tasaciones</option>
-                  <option value="Construccion">Construccion</option>
-                  <option value="Levantamiento Topografico">Levantamiento Topografico</option>
-                </select>
-              </div>
-              <Input value={bulkEtiquetaOtro} onChange={e=>setBulkEtiquetaOtro(e.target.value)} placeholder="Otros (opcional)" className="h-8 text-sm" />
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={bulkTag}>Etiquetar</Button>
-                <Button variant="outline" size="sm" onClick={bulkMove}>Pipeline</Button>
-                <Button variant="destructive" size="sm" onClick={bulkDelete}>Eliminar</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Filters */}
       <Card>
@@ -441,7 +588,7 @@ export function ContactsList() {
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <Button
                 variant={selectedType === "all" ? "default" : "outline"}
                 size="sm"
@@ -478,6 +625,24 @@ export function ContactsList() {
               >
                 Clientes
               </Button>
+              {/* Seleccionar todos */}
+              <Button variant="outline" size="sm" onClick={selectAllOnPage}>Seleccionar todos</Button>
+              {/* Separar por tipo */}
+              <Button variant={splitByType?"default":"outline"} size="sm" onClick={()=> setSplitByType(v=>!v)}>
+                {splitByType? 'Juntar' : 'Separar por tipo'}
+              </Button>
+              {/* Abrir duplicados */}
+              <Button variant="outline" size="sm" onClick={async ()=>{
+                try {
+                  const groups = await listDuplicateContacts()
+                  setDupGroups(groups)
+                  setDupsOpen(true)
+                } catch(e:any) {
+                  toast({ title:'Error', description: e.message || 'No se pudo obtener duplicados', variant:'destructive' })
+                }
+              }}>
+                <Merge className="h-4 w-4 mr-2"/>Duplicados
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -497,160 +662,148 @@ export function ContactsList() {
             <p className="text-sm text-gray-400 mt-2">
               Los contactos deben cargarse desde la base de datos.
             </p>
-            <p className="text-sm text-gray-400">
-              Implementar conexión con API de contactos.
-            </p>
           </CardContent>
         </Card>
       ) : (
         <>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredContacts.map(c => (
-            <Card key={c.id} className="border border-gray-200 group">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center justify-between text-base font-semibold">
-                  <span className="truncate flex items-center gap-2" title={c.nombre}>
-                    <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
-                    <button type="button" className="text-left hover:underline" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
-                      {c.nombre}
-                    </button>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Badge style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
-                        const phone = (c.telefono || '').replace(/\D/g,'')
-                        if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
-                        const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
-                        const url = `https://wa.me/${phone}?text=${msg}`
-                        window.open(url, '_blank')
-                      }}>
-                        <MessageSquare className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
-                        const title = encodeURIComponent(`Llamada con ${c.nombre}`)
-                        const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
-                        const start = new Date(Date.now() + 60*60*1000)
-                        const end = new Date(start.getTime() + 30*60*1000)
-                        const fmt = (d:Date)=> d.toISOString().replace(/[-:]|\..*/g,'')
-                        const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
-                        window.open(url, '_blank')
-                      }}>
-                        <CalendarIcon className="h-4 w-4" />
-                      </Button>
-                      {/* Crear oportunidad en pipeline (persistente en backend) */}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
-                        try {
-                          if (creatingOppForId) return;
-                          setCreatingOppForId(c.id!)
-                          // Primero persistimos en backend como oportunidad
-                          const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
-                          // Luego reflejamos en UI local (etapa contacto_inicial)
-                          console.log('[Pipeline] creando oportunidad desde contacto', opp)
-                          addOpportunity('contacto_inicial', {
-                            id: String(opp.id), // usar id backend para permitir persistir movimientos
-                            clientName: opp.nombreCliente || c.nombre,
-                            serviceName: 'Cotización',
-                            agent: 'Sin asignar',
-                            value: opp.valorUsd || 0,
-                            probability: opp.probabilidad || 0,
-                            closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10),
-                            phone: opp.telefono || c.telefono || '',
-                            email: opp.email || c.email || ''
-                          })
-                          // Actualizar tipo del contacto a 'cliente' (backend + UI)
-                          try {
-                            await updateContact(c.id!, { tipo: 'cliente' })
-                            setContacts(prev => prev.map(x => x.id === c.id ? { ...x, tipo: 'cliente' } : x))
-                          } catch(_) { /* no bloquear por este fallo */ }
-                          toast({ title: 'Oportunidad creada', description: c.nombre })
-                          // Cambiar automáticamente a la pestaña pipeline para mostrar la nueva oportunidad
-                          setActiveTab('pipeline')
-                          console.log('[Pipeline] estado añadido, navegando a pipeline')
-                        } catch(e:any) {
-                          let msg = e.message || 'No se pudo crear oportunidad'
-                          const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
-                          let status = ''
-                          if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/,'') }
-                          if (status === '401') msg = 'Sesión expirada o no autenticado'
-                          if (status === '403') msg = 'Sin permisos para crear oportunidades'
-                          toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
-                          console.error('[Pipeline] error creando oportunidad', status, e)
-                        } finally { setCreatingOppForId(null) }
-                      }}>
-                        <Workflow className="h-4 w-4" />
-                      </Button>
-                      {/* Botón de eliminar visible para todos; el backend restringe a admin y el handler muestra mensaje si no tiene permisos */}
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
-                        {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </CardTitle>
-                <CardDescription className="text-xs text-gray-500">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
-              </CardHeader>
-              {c.notas && <CardContent className="pt-0 text-xs text-gray-600 whitespace-pre-line">{c.notas}</CardContent>}
-            </Card>
-          ))}
-  </div>
-  <div className="flex items-center justify-between mt-4">
-          <div className="text-xs text-gray-600">Página {page} de {totalPages} · {total} contacto(s)</div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page<=1} onClick={()=> setPage(p => Math.max(1, p-1))}>Anterior</Button>
-            <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={()=> setPage(p => Math.min(totalPages, p+1))}>Siguiente</Button>
+          {renderContactsGrid(filteredContacts)}
+          <div className="flex items-center justify-between mt-4">
+            <div className="text-xs text-gray-600">Página {page} de {totalPages} · {total} contacto(s)</div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" disabled={page<=1} onClick={()=> setPage(p => Math.max(1, p-1))}>Anterior</Button>
+              <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={()=> setPage(p => Math.min(totalPages, p+1))}>Siguiente</Button>
+            </div>
           </div>
-        </div>
-  </>
+        </>
       )}
-    <NewContactDialog
-      open={openNew}
-      onOpenChange={setOpenNew}
-      onSubmit={handleCreateContact}
-    />
-    <EditContactDialog
-      open={editOpen}
-      contact={contactEditing}
-      onOpenChange={(v) => { setEditOpen(v); if(!v) setContactEditing(null) }}
-      onSubmit={async (id, data) => {
-        await handleUpdateContact(id, data)
-      }}
-    />
-    {importing && (
-      <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-        <div className="bg-white rounded-md p-6 shadow-md text-center space-y-2">
-          <p className="font-medium">Importando contactos de Google...</p>
-          <p className="text-sm text-gray-500">Puedes continuar; esta ventana se cerrará al terminar.</p>
-        </div>
-      </div>
-    )}
-    {/* Preview dialog */}
-    <Dialog open={previewOpen} onOpenChange={(v)=>{ setPreviewOpen(v); if(!v) setPreviewContact(null) }}>
-      <DialogContent className="max-w-md sm:max-w-lg p-4 max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Contacto</DialogTitle>
-        </DialogHeader>
-        {previewContact && (
-          <div className="space-y-2 text-sm">
-            <div><span className="text-gray-500">Nombre:</span> {previewContact.nombre}</div>
-            <div><span className="text-gray-500">Email:</span> {previewContact.email || '—'}</div>
-            <div><span className="text-gray-500">Teléfono:</span> {previewContact.telefono || '—'}</div>
-            <div><span className="text-gray-500">Tipo:</span> {previewContact.tipo || 'lead'}</div>
-            <div><span className="text-gray-500">Etiqueta:</span> {(previewContact.etiquetas && previewContact.etiquetas[0]) || previewContact.etiqueta_otro || '—'}</div>
-            <div><span className="text-gray-500">Departamento:</span> {(previewContact as any).departamento || '—'}</div>
-            <div><span className="text-gray-500">Sexo:</span> {(previewContact as any).sexo || '—'}</div>
-            <div><span className="text-gray-500">F. Nacimiento:</span> {((previewContact as any).fecha_nacimiento || '').toString().slice(0,10) || '—'}</div>
-            {previewContact.notas && (
-              <div><span className="text-gray-500">Notas:</span>
-                <div className="mt-1 whitespace-pre-line">{previewContact.notas}</div>
-              </div>
-            )}
+      <NewContactDialog
+        open={openNew}
+        onOpenChange={setOpenNew}
+        onSubmit={handleCreateContact}
+      />
+      <EditContactDialog
+        open={editOpen}
+        contact={contactEditing}
+        onOpenChange={(v) => { setEditOpen(v); if(!v) setContactEditing(null) }}
+        onSubmit={async (id, data) => {
+          await handleUpdateContact(id, data)
+        }}
+      />
+      {/* Estado Importando overlay */}
+      {importing && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-md p-6 shadow-md text-center space-y-2">
+            <p className="font-medium">Importando contactos de Google...</p>
+            <p className="text-sm text-gray-500">Puedes continuar; esta ventana se cerrará al terminar.</p>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+      {/* Preview dialog */}
+      <Dialog open={previewOpen} onOpenChange={(v)=>{ setPreviewOpen(v); if(!v) setPreviewContact(null) }}>
+        {/* Modal iOS-like */}
+        <DialogContent className="max-w-md sm:max-w-lg p-6 max-h-[82vh] overflow-y-auto rounded-3xl bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Contacto</DialogTitle>
+          </DialogHeader>
+          {previewContact && (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-yellow-300 to-yellow-500 text-white flex items-center justify-center font-semibold shadow">{(previewContact.nombre||'?').charAt(0).toUpperCase()}</div>
+                <div className="text-base font-semibold">{previewContact.nombre}</div>
+              </div>
+              <div><span className="text-gray-500">Email:</span> {previewContact.email || '—'}</div>
+              <div><span className="text-gray-500">Teléfono:</span> {previewContact.telefono || '—'}</div>
+              <div><span className="text-gray-500">Tipo:</span> {previewContact.tipo || 'lead'}</div>
+              <div><span className="text-gray-500">Etiqueta:</span> {(previewContact.etiquetas && previewContact.etiquetas[0]) || previewContact.etiqueta_otro || '—'}</div>
+              <div><span className="text-gray-500">Departamento:</span> {(previewContact as any).departamento || '—'}</div>
+              <div><span className="text-gray-500">Sexo:</span> {(previewContact as any).sexo || '—'}</div>
+              <div><span className="text-gray-500">F. Nacimiento:</span> {((previewContact as any).fecha_nacimiento || '').toString().slice(0,10) || '—'}</div>
+              {previewContact.notas && (
+                <div><span className="text-gray-500">Notas:</span>
+                  <div className="mt-1 whitespace-pre-line">{previewContact.notas}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* Duplicados dialog */}
+      <Dialog open={dupsOpen} onOpenChange={setDupsOpen}>
+        <DialogContent className="max-w-2xl p-4 max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Duplicados detectados</DialogTitle>
+          </DialogHeader>
+          {!dupGroups.length ? (
+            <p className="text-sm text-gray-500">No se encontraron duplicados.</p>
+          ) : (
+            <div className="space-y-4">
+              {dupGroups.map((g, idx) => (
+                <Card key={idx}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">{g.by}: <span className="font-normal text-gray-600">{g.value || '—'}</span> · {g.count} elemento(s)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="text-xs text-gray-600">IDs: {g.members.map(m=>m.id).join(', ')}</div>
+                    <div className="mt-2 flex gap-2">
+                      <Button size="sm" variant="outline" onClick={async ()=>{
+                        if (g.members.length < 2) return
+                        const [primary, ...dups] = g.members
+                        for (const d of dups) { await mergeContacts(primary.id!, d.id!).catch(()=>{}) }
+                        toast({ title:'Fusión completada', description:`Grupo ${g.by}: ${g.value}` })
+                        await loadContacts({ page: 1 })
+                        // Actualizar lista local de duplicados
+                        const rest = [...dupGroups]
+                        rest.splice(idx,1)
+                        setDupGroups(rest)
+                      }}>Fusionar grupo</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              <div className="flex justify-end">
+                <Button onClick={async ()=>{
+                  for (const g of dupGroups) {
+                    if (g.members.length < 2) continue
+                    const [primary, ...dups] = g.members
+                    for (const d of dups) { await mergeContacts(primary.id!, d.id!).catch(()=>{}) }
+                  }
+                  toast({ title:'Fusión en lote', description:`Se fusionaron ${dupGroups.length} grupo(s)` })
+                  setDupsOpen(false)
+                  await loadContacts({ page: 1 })
+                }}>Fusionar todos</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* Barra inferior fija para acciones masivas */}
+      {showBottomBar && (
+        <div className="fixed inset-x-0 bottom-3 z-40 px-4">
+          <div className="mx-auto max-w-6xl rounded-2xl bg-white/85 backdrop-blur-xl border border-white/40 shadow-2xl p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm">Seleccionados: <b>{selectedIds.size}</b></div>
+              <div className="flex-1 flex items-center gap-2">
+                <select value={bulkEtiqueta} onChange={e=>setBulkEtiqueta(e.target.value)} className="border rounded-md h-8 px-2 bg-white text-sm">
+                  <option value="">Etiqueta…</option>
+                  <option value="Techo Propio">Techo Propio</option>
+                  <option value="Credito Mivivienda">Credito Mivivienda</option>
+                  <option value="Terreno en Captacion">Terreno en Captacion</option>
+                  <option value="Tasaciones">Tasaciones</option>
+                  <option value="Construccion">Construccion</option>
+                  <option value="Levantamiento Topografico">Levantamiento Topografico</option>
+                </select>
+                <Input value={bulkEtiquetaOtro} onChange={e=>setBulkEtiquetaOtro(e.target.value)} placeholder="Otros (opcional)" className="h-8 text-sm max-w-[220px]" />
+                <Button variant="outline" size="sm" onClick={bulkTag}>Etiquetar</Button>
+                <Button variant="outline" size="sm" onClick={bulkMove}>Pipeline</Button>
+                <Button variant="destructive" size="sm" onClick={bulkDelete}>Eliminar</Button>
+              </div>
+              <Button variant="ghost" size="sm" onClick={clearSelection}>Cerrar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Spacer para asegurar que el contenido no quede oculto tras la barra inferior */}
+      {showBottomBar && <div style={{ height: 96 }} />}
     </div>
   )
 }

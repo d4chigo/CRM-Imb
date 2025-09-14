@@ -1,18 +1,31 @@
 const express = require('express');
-const { authenticateToken } = require('../middleware/auth');
-const GoogleContactsController = require('../controllers/googleContactsController');
-
 const router = express.Router();
+const GoogleContactsController = require('../controllers/googleContactsController');
+const { isAuthenticated } = require('../middleware/auth');
 
-// Obtener URL de autorización de Google
-router.get('/contacts/auth-url', authenticateToken, GoogleContactsController.authUrl);
-// Callback después de autorizar (Google redirige aquí con ?code=...)
-// IMPORTANTE: No usamos authenticateToken aquí porque la redirección de Google NO conserva
-// el header Authorization. Si se necesita ligar al usuario, incluir un token firmado en 'state'.
+// Ruta para obtener URL de autenticación
+router.get('/contacts/auth-url', isAuthenticated, GoogleContactsController.authUrl);
+
+// Callback de OAuth2 (maneja redirección desde Google)
 router.get('/contacts/callback', GoogleContactsController.callback);
 
+// Sincronizar manualmente contactos de Google al CRM
+router.post('/contacts/sync', isAuthenticated, GoogleContactsController.syncContacts);
+
+// Obtener estado de sincronización
+router.get('/contacts/sync/status', isAuthenticated, GoogleContactsController.getSyncStatus);
+
+// Crear/actualizar un contacto específico en Google (compatibilidad)
+router.post('/contacts/:id/sync', isAuthenticated, GoogleContactsController.createGoogleContact);
+// Compat: endpoints usados por el cliente actual para crear/upsert (redirigen al handler por id si aplica)
+router.post('/contacts/create', isAuthenticated, GoogleContactsController.createGoogleContact);
+router.post('/contacts/upsert', isAuthenticated, GoogleContactsController.createGoogleContact);
+
+// Preview para depurar importación
+router.get('/contacts/preview', isAuthenticated, GoogleContactsController.preview);
+
 // Debug: verificar variables de entorno (solo autenticado)
-router.get('/contacts/env-check', authenticateToken, (req,res)=>{
+router.get('/contacts/env-check', isAuthenticated, (req,res)=>{
 	res.json({
 		success:true,
 		data:{
@@ -22,8 +35,5 @@ router.get('/contacts/env-check', authenticateToken, (req,res)=>{
 		}
 	});
 });
-
-// Crear contacto simple en Google (nombre/apellido/email/telefono)
-router.post('/contacts/create', authenticateToken, GoogleContactsController.createGoogleContact);
 
 module.exports = router;
