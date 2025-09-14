@@ -199,6 +199,94 @@ async function ensureSchema() {
       await conn.query(`ALTER TABLE etapas_pipeline ADD COLUMN orden INT NOT NULL DEFAULT 0 AFTER color_hex`);
       console.log('🛠️  Columna etapas_pipeline.orden añadida');
     }
+    // --- Campos realistas para cotizacion (catálogo de servicios/quotes) ---
+    if (await tableExists('cotizacion')) {
+      const cot = 'cotizacion';
+      // Precio base y moneda
+      if (!(await columnExists(cot, 'precio_base'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN precio_base DECIMAL(14,2) NULL AFTER descripcion`);
+        console.log('🛠️  cotizacion.precio_base añadida');
+      }
+      if (!(await columnExists(cot, 'moneda'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN moneda VARCHAR(8) NOT NULL DEFAULT 'USD' AFTER precio_base`);
+        console.log('🛠️  cotizacion.moneda añadida');
+      }
+      // IGV / impuestos y descuento
+      if (!(await columnExists(cot, 'incluye_igv'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN incluye_igv BOOLEAN NOT NULL DEFAULT false AFTER moneda`);
+        console.log('🛠️  cotizacion.incluye_igv añadida');
+      }
+      if (!(await columnExists(cot, 'igv_porcentaje'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN igv_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 18.00 AFTER incluye_igv`);
+        console.log('🛠️  cotizacion.igv_porcentaje añadida');
+      }
+      if (!(await columnExists(cot, 'descuento_porcentaje'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN descuento_porcentaje DECIMAL(5,2) NOT NULL DEFAULT 0.00 AFTER igv_porcentaje`);
+        console.log('🛠️  cotizacion.descuento_porcentaje añadida');
+      }
+      // Vigencia y términos
+      if (!(await columnExists(cot, 'vigencia_dias'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN vigencia_dias INT NOT NULL DEFAULT 30 AFTER descuento_porcentaje`);
+        console.log('🛠️  cotizacion.vigencia_dias añadida');
+      }
+      if (!(await columnExists(cot, 'condiciones_pago'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN condiciones_pago TEXT NULL AFTER vigencia_dias`);
+        console.log('🛠️  cotizacion.condiciones_pago añadida');
+      }
+      if (!(await columnExists(cot, 'notas'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN notas TEXT NULL AFTER condiciones_pago`);
+        console.log('🛠️  cotizacion.notas añadida');
+      }
+      if (!(await columnExists(cot, 'items_json'))) {
+        try {
+          await conn.query(`ALTER TABLE ${cot} ADD COLUMN items_json JSON NULL AFTER notas`);
+        } catch (_) {
+          await conn.query(`ALTER TABLE ${cot} ADD COLUMN items_json TEXT NULL AFTER notas`);
+        }
+        console.log('🛠️  cotizacion.items_json añadida (JSON/TEXT)');
+      }
+      // Información de propiedad (resumen)
+      if (!(await columnExists(cot, 'propiedad_tipo'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN propiedad_tipo VARCHAR(40) NULL AFTER items_json`);
+        console.log('🛠️  cotizacion.propiedad_tipo añadida');
+      }
+      if (!(await columnExists(cot, 'propiedad_ubicacion'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN propiedad_ubicacion VARCHAR(255) NULL AFTER propiedad_tipo`);
+        console.log('🛠️  cotizacion.propiedad_ubicacion añadida');
+      }
+      if (!(await columnExists(cot, 'area_m2'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN area_m2 DECIMAL(10,2) NULL AFTER propiedad_ubicacion`);
+        console.log('🛠️  cotizacion.area_m2 añadida');
+      }
+      if (!(await columnExists(cot, 'dormitorios'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN dormitorios TINYINT NULL AFTER area_m2`);
+        console.log('🛠️  cotizacion.dormitorios añadida');
+      }
+      if (!(await columnExists(cot, 'banos'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN banos TINYINT NULL AFTER dormitorios`);
+        console.log('🛠️  cotizacion.banos añadida');
+      }
+      if (!(await columnExists(cot, 'estacionamientos'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN estacionamientos TINYINT NULL AFTER banos`);
+        console.log('🛠️  cotizacion.estacionamientos añadida');
+      }
+      if (!(await columnExists(cot, 'estado'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN estado VARCHAR(40) NULL AFTER estacionamientos`);
+        console.log('🛠️  cotizacion.estado añadida');
+      }
+      if (!(await columnExists(cot, 'mantenimiento_mensual'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN mantenimiento_mensual DECIMAL(12,2) NULL AFTER estado`);
+        console.log('🛠️  cotizacion.mantenimiento_mensual añadida');
+      }
+      if (!(await columnExists(cot, 'fecha_entrega'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN fecha_entrega DATE NULL AFTER mantenimiento_mensual`);
+        console.log('🛠️  cotizacion.fecha_entrega añadida');
+      }
+      if (!(await columnExists(cot, 'amoblado'))) {
+        await conn.query(`ALTER TABLE ${cot} ADD COLUMN amoblado BOOLEAN NULL AFTER fecha_entrega`);
+        console.log('🛠️  cotizacion.amoblado añadida');
+      }
+    }
     // Semilla de etapas por defecto si la tabla está vacía
     const [countRows] = await conn.query(`SELECT COUNT(*) AS c FROM etapas_pipeline`);
     if (countRows[0].c === 0) {
