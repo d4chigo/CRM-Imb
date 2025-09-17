@@ -126,8 +126,9 @@ export function PipelineBoard() {
       if (!rootRef.current) return
       const rect = rootRef.current.getBoundingClientRect()
       // margen inferior para respirar y dejar visible la barra
-      const bottomPadding = 24
-      const h = Math.max(220, Math.floor(window.innerHeight - rect.top - bottomPadding))
+      const bottomPadding = 40
+      // Altura mínima más generosa para mostrar al menos 2-3 tarjetas
+      const h = Math.max(400, Math.floor(window.innerHeight - rect.top - bottomPadding))
       setViewportH(h)
     }
     computeHeight()
@@ -254,11 +255,11 @@ export function PipelineBoard() {
         {/* Viewport que se adapta al alto de la ventana y contiene su propia barra horizontal */}
         <div
           className="pipeline-viewport"
-          style={{ height: viewportH ? `${viewportH}px` : undefined }}
+          style={{ height: viewportH ? `${viewportH}px` : '60vh' }}
         >
-          <div className="w-full h-full pb-2 scroll-x-area flex gap-4">
+          <div className="pipeline-columns">
             {filteredColumns.map((column: any) => (
-              <div key={column.id} className="min-w-[300px] flex-none">
+              <div key={column.id} className="min-w-[320px] flex-shrink-0">
                 <Card className="h-full shadow-sm border-2 hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3" style={{ backgroundColor: `${column.color}10` }}>
                     <div className="flex items-center justify-between">
