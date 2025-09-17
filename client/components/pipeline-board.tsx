@@ -29,6 +29,8 @@ import { createOpportunity, listOpportunities, updateOpportunity, deleteOpportun
 export function PipelineBoard() {
   const { columns, addOpportunity, addColumn, removeColumn, updateColumn, reorderColumns, setColumns, removeOpportunityLocal } = usePipeline() as any
   const [searchTerm, setSearchTerm] = React.useState("")
+  const rootRef = React.useRef<HTMLDivElement | null>(null)
+  const [viewportH, setViewportH] = React.useState<number | undefined>(undefined)
   // Filtrado local (equivalente al hook anterior)
   const filteredColumns = React.useMemo(() => {
     if (!searchTerm) return columns
@@ -118,8 +120,23 @@ export function PipelineBoard() {
     toast({ title: "Llamada registrada", description: `${values.outcome}` })
   }
 
+  // Calcular alto disponible para que el carril horizontal quede dentro del componente
+  useEffect(() => {
+    function computeHeight() {
+      if (!rootRef.current) return
+      const rect = rootRef.current.getBoundingClientRect()
+      // margen inferior para respirar y dejar visible la barra
+      const bottomPadding = 24
+      const h = Math.max(220, Math.floor(window.innerHeight - rect.top - bottomPadding))
+      setViewportH(h)
+    }
+    computeHeight()
+    window.addEventListener('resize', computeHeight)
+    return () => window.removeEventListener('resize', computeHeight)
+  }, [])
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" ref={rootRef}>
       <div className="flex items-center justify-end flex-wrap gap-2">
         <div className="flex items-center gap-2">
             <Dialog open={manageOpen} onOpenChange={setManageOpen}>
@@ -194,7 +211,7 @@ export function PipelineBoard() {
         <Input placeholder="Buscar por cliente, servicio o agente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
       </div>
 
-      <DragDropContext onDragEnd={async (result) => {
+  <DragDropContext onDragEnd={async (result) => {
         const { destination, source, draggableId } = result
         const from = source?.droppableId
         const to = destination?.droppableId
@@ -234,7 +251,12 @@ export function PipelineBoard() {
           }
         }
       }}>
-        <div className="w-full pb-4 scroll-x-area flex gap-4">
+        {/* Viewport que se adapta al alto de la ventana y contiene su propia barra horizontal */}
+        <div
+          className="pipeline-viewport"
+          style={{ height: viewportH ? `${viewportH}px` : undefined }}
+        >
+          <div className="w-full h-full pb-2 scroll-x-area flex gap-4">
             {filteredColumns.map((column: any) => (
               <div key={column.id} className="min-w-[300px] flex-none">
                 <Card className="h-full shadow-sm border-2 hover:shadow-md transition-shadow">
@@ -412,6 +434,7 @@ export function PipelineBoard() {
                 </Card>
               </div>
             ))}
+          </div>
         </div>
       </DragDropContext>
 

@@ -145,3 +145,12 @@ body {
   border-radius: 999px;
   border: 2px solid transparent;
 }
+
+/* Pipeline viewport: fills available height and avoids nested vertical scrolls */
+.pipeline-viewport {
+  min-height: 0;
+  /* No vertical scroll here; the page handles it. We only want horizontal inside. */
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
