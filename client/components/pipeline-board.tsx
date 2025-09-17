@@ -234,10 +234,9 @@ export function PipelineBoard() {
           }
         }
       }}>
-  <div className="w-full scroll-x-area pb-4">
-          <div className="flex gap-4 min-w-max">
+        <div className="w-full pb-4 scroll-x-area flex gap-4">
             {filteredColumns.map((column: any) => (
-              <div key={column.id} className="w-80 flex-shrink-0">
+              <div key={column.id} className="min-w-[300px] flex-none">
                 <Card className="h-full shadow-sm border-2 hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3" style={{ backgroundColor: `${column.color}10` }}>
                     <div className="flex items-center justify-between">
@@ -413,7 +412,6 @@ export function PipelineBoard() {
                 </Card>
               </div>
             ))}
-          </div>
         </div>
       </DragDropContext>
 
