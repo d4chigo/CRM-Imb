@@ -2,10 +2,7 @@
 
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Building2, Users, TrendingUp, Calendar, DollarSign, User, LogOut } from "lucide-react"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
 import { PipelineProvider } from '@/contexts/PipelineContext'
@@ -13,22 +10,14 @@ import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTab
 import { CotizacionesList } from "@/components/cotizaciones-list"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
+import { AppShell } from "@/components/layout/AppShell"
 
 function DashboardInner() {
   const { activeTab, setActiveTab } = useDashboardTabs()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   
   // Proteger ruta - redirigir a login si no está autenticado
   const { isAuthenticated, loading } = useRequireAuth()
-
-  const handleLogout = async () => {
-    try {
-      await logout()
-      window.location.href = "/login"
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error)
-    }
-  }
 
   // Mostrar loading mientras se verifica autenticación
   if (loading) {
@@ -51,57 +40,33 @@ function DashboardInner() {
   // Estadísticas eliminadas - deben venir de la BD
   // const stats = []
 
+  const sectionTitle = {
+    pipeline: 'Pipeline de Ventas',
+    contacts: 'Contactos',
+    properties: 'Cotizaciones',
+    activities: 'Actividades',
+    statistics: 'Estadísticas'
+  }[activeTab] || 'Dashboard'
+
+  const sectionSubtitle = {
+    pipeline: 'Arrastra las oportunidades entre las etapas.',
+    contacts: 'Gestiona y segmenta tus contactos.',
+    properties: 'Administra tus cotizaciones y servicios.',
+    activities: 'Controla tareas y seguimientos.',
+    statistics: 'Analiza el rendimiento de tu CRM.',
+  }[activeTab] || 'Gestiona tu CRM con una interfaz clara y moderna.'
+
   return (
     <PipelineProvider>
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="border-b bg-white">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center space-x-4">
-            <div className="p-2 rounded-lg" style={{ backgroundColor: "#FCBA00" }}>
-              <Building2 className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold" style={{ color: "#303030" }}>
-                CRM Inmobiliario
-              </h1>
-              <p className="text-sm text-gray-500">Panel de Control</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <User className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium">{user?.name || 'Usuario'}</span>
-              <Badge variant="secondary">
-                {user?.role === 'admin' ? 'Administrador' : 'Agente'}
-              </Badge>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center space-x-2 bg-transparent"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Salir</span>
-            </Button>
-          </div>
+      <AppShell title="CRM Inmobiliario">
+        {/* Section header (replaces duplicate tab bar) */}
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold text-foreground">{sectionTitle}</h2>
+          <p className="text-sm text-muted-foreground">{sectionSubtitle}</p>
         </div>
-      </header>
-
-      <div className="p-6">
-        {/* TODO: Stats Cards - Conectar con datos reales de la BD */}
-        {/* Sección de estadísticas eliminada - debe implementarse con datos de la base de datos */}
 
         {/* Main Content */}
-  <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="pipeline">Pipeline de Ventas</TabsTrigger>
-            <TabsTrigger value="contacts">Contactos</TabsTrigger>
-            <TabsTrigger value="properties">Cotizaciones</TabsTrigger>
-            <TabsTrigger value="activities">Actividades</TabsTrigger>
-            <TabsTrigger value="statistics">Estadísticas</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
 
           <TabsContent value="pipeline" className="space-y-6">
             <PipelineBoard />
@@ -149,9 +114,8 @@ function DashboardInner() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
-  </div>
-  </PipelineProvider>
+      </AppShell>
+    </PipelineProvider>
   )
 }
 

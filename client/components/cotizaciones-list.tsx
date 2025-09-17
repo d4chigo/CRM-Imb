@@ -48,7 +48,7 @@ export function CotizacionesList() {
         </div>
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
           <DialogTrigger asChild>
-            <Button style={{ backgroundColor: "#FCBA00" }} className="text-white">
+              <Button variant="brand">
               <Plus className="h-4 w-4 mr-2" /> Nueva cotización
             </Button>
           </DialogTrigger>
@@ -346,7 +346,7 @@ function CreateCotizacionDialog({ onCreated }:{ onCreated: (c: CotizacionDTO)=> 
           </div>
         </div>
         <DialogFooter>
-          <Button type="submit" disabled={saving} style={{ backgroundColor: "#FCBA00" }} className="text-white">{saving? 'Guardando...' : 'Guardar'}</Button>
+          <Button type="submit" disabled={saving} variant="brand">{saving? 'Guardando...' : 'Guardar'}</Button>
         </DialogFooter>
       </form>
     </DialogContent>
@@ -539,7 +539,7 @@ function EditCotizacionForm({ item, onSaved }:{ item: CotizacionDTO, onSaved: (c
         </div>
       </div>
       <DialogFooter>
-        <Button type="submit" disabled={saving} style={{ backgroundColor: "#FCBA00" }} className="text-white">{saving? 'Guardando...' : 'Guardar'}</Button>
+        <Button type="submit" disabled={saving} variant="brand">{saving? 'Guardando...' : 'Guardar'}</Button>
       </DialogFooter>
     </form>
   )

@@ -252,7 +252,7 @@ export function ContactsList() {
       case "lead":
         return "#94A3B8"
       case "prospecto":
-        return "#FCBA00"
+        return "var(--primary)"
       case "cliente":
         return "#10B981"
       default:
@@ -599,7 +599,7 @@ export function ContactsList() {
               Última importación: <b>+{lastImport.imported}</b> · duplicados {lastImport.skipped}
             </span>
           )}
-          <Button style={{ backgroundColor: "#FCBA00" }} className="text-white" onClick={() => setOpenNew(true)}>
+          <Button variant="brand" onClick={() => setOpenNew(true)}>
             <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
           </Button>
         </div>
@@ -622,38 +622,30 @@ export function ContactsList() {
             </div>
             <div className="flex gap-2 items-center">
               <Button
-                variant={selectedType === "all" ? "default" : "outline"}
+                variant={selectedType === "all" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedType("all")}
-                style={selectedType === "all" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedType === "all" ? "text-white" : ""}
               >
                 Todos
               </Button>
               <Button
-                variant={selectedType === "lead" ? "default" : "outline"}
+                variant={selectedType === "lead" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedType("lead")}
-                style={selectedType === "lead" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedType === "lead" ? "text-white" : ""}
               >
                 Leads
               </Button>
               <Button
-                variant={selectedType === "prospecto" ? "default" : "outline"}
+                variant={selectedType === "prospecto" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedType("prospecto")}
-                style={selectedType === "prospecto" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedType === "prospecto" ? "text-white" : ""}
               >
                 Prospectos
               </Button>
               <Button
-                variant={selectedType === "cliente" ? "default" : "outline"}
+                variant={selectedType === "cliente" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedType("cliente")}
-                style={selectedType === "cliente" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedType === "cliente" ? "text-white" : ""}
               >
                 Clientes
               </Button>

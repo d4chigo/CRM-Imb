@@ -1,0 +1,147 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+:root {
+  /* CRM Visual System — Minimal, elegant, professional */
+  /* Core palette */
+  --background: #FFFFFF;              /* Main background */
+  --foreground: #303030;              /* Primary text (very dark gray) */
+  --card: #FFFFFF;                    /* Card background */
+  --card-foreground: #303030;
+  --popover: #FFFFFF;
+  --popover-foreground: #303030;
+
+  /* Brand & actions */
+  --primary: #FCBA00;                 /* Gold accents & primary buttons */
+  --primary-foreground: #303030;      /* Text on gold */
+  --secondary: #F5F5F5;               /* Light gray secondary bg */
+  --secondary-foreground: #303030;
+  --muted: #F5F5F5;                   /* Muted surfaces */
+  --muted-foreground: #8A8A8A;        /* Secondary text */
+  --accent: #F5F5F5;                  /* Subtle accents */
+  --accent-foreground: #303030;
+
+  /* States */
+  --success: #00BFA6;                 /* Soft teal for success */
+  --destructive: #FF4E4E;             /* Coral red for errors */
+  --destructive-foreground: #FFFFFF;
+
+  /* Surfaces & interactions */
+  --border: #E6E6E6;                  /* Soft borders */
+  --input: #E6E6E6;
+  --ring: #FCBA00;                    /* Focus ring */
+  --radius: 0.625rem;                 /* 10px rounded */
+
+  /* Shell (sidebar/topbar) */
+  --sidebar-bg: #303030;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-muted: #8A8A8A;
+  --sidebar-active: #FCBA00;
+}
+
+.dark {
+  --background: #121212;
+  --foreground: #F5F5F5;
+  --card: #1C1C1C;
+  --card-foreground: #F5F5F5;
+  --popover: #1C1C1C;
+  --popover-foreground: #F5F5F5;
+  --primary: #FCBA00;
+  --primary-foreground: #1C1C1C;
+  --secondary: #1E1E1E;
+  --secondary-foreground: #EDEDED;
+  --muted: #202020;
+  --muted-foreground: #B5B5B5;
+  --accent: #202020;
+  --accent-foreground: #F5F5F5;
+  --success: #00BFA6;
+  --destructive: #FF4E4E;
+  --destructive-foreground: #1C1C1C;
+  --border: #2A2A2A;
+  --input: #2A2A2A;
+  --ring: #FCBA00;
+  --sidebar-bg: #161616;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-muted: #9A9A9A;
+  --sidebar-active: #FCBA00;
+}
+
+/* Base styles */
+* {
+  border-color: var(--border);
+}
+
+html, body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Shell helpers */
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100vh; /* lock to viewport to avoid nested body scroll */
+  min-height: 0; /* allow children to define overflow */
+  background: var(--background);
+}
+.app-shell .sidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-foreground);
+}
+.app-shell .sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--sidebar-foreground);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.app-shell .sidebar .nav-item:hover {
+  background: rgba(255,255,255,0.06);
+}
+.app-shell .sidebar .nav-item[aria-current="page"] {
+  background: rgba(252, 186, 0, 0.14);
+  color: var(--sidebar-active);
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: saturate(160%) blur(6px);
+  background: color-mix(in srgb, var(--background) 86%, #fff 14%);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Single-scroll layout: only main area scrolls */
+.content-scroll {
+  min-height: 0;
+}
+
+/* Avoid global double scrollbars */
+body {
+  overflow: hidden;
+}
+
+/* Horizontal scroll styling for rails (e.g., Pipeline) */
+.scroll-x-area {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) transparent;
+}
+.scroll-x-area::-webkit-scrollbar {
+  height: 10px;
+}
+.scroll-x-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-x-area::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--primary) 70%, #000 0%);
+  border-radius: 999px;
+  border: 2px solid transparent;
+}

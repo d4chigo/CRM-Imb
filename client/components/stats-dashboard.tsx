@@ -1,25 +1,47 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart"
 import { authService } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Pie,
-  PieChart,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-} from "recharts"
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip as ChartTooltip,
+  Legend as ChartLegend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title as ChartTitle,
+} from "chart.js"
+import { Pie, Bar } from "react-chartjs-2"
 
 interface StatItem { label: string; count: number }
+
+ChartJS.register(ArcElement, ChartTooltip, ChartLegend, CategoryScale, LinearScale, BarElement, ChartTitle)
+
+function useThemeColor(varName: string, fallback: string) {
+  return useMemo(() => {
+    if (typeof window === 'undefined') return fallback
+    const rs = getComputedStyle(document.documentElement)
+    const v = rs.getPropertyValue(varName).trim()
+    return v || fallback
+  }, [varName, fallback])
+}
+
+const defaultPalette = [
+  "#C59D26", // brand gold
+  "#1F2937", // slate-800
+  "#3B82F6", // blue-500
+  "#10B981", // emerald-500
+  "#6366F1", // indigo-500
+  "#F59E0B", // amber-500
+  "#EF4444", // red-500
+  "#8B5CF6", // violet-500
+]
 
 export function StatsDashboard() {
   const [byDept, setByDept] = useState<StatItem[]>([])
@@ -127,6 +149,107 @@ export function StatsDashboard() {
     return () => { mounted = false }
   }, [])
 
+  const primary = useThemeColor('--primary', '#C59D26')
+  const fg = useThemeColor('--foreground', '#0f172a')
+  const mutedFg = useThemeColor('--muted-foreground', '#6b7280')
+  const border = useThemeColor('--border', '#e5e7eb')
+
+  const pieSexData = useMemo(() => {
+    const labels = bySex.map(d => d.label)
+    const data = bySex.map(d => d.count)
+    const bg = labels.map((_, i) => defaultPalette[i % defaultPalette.length])
+    const borderColors = bg.map(c => c)
+    return {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: bg,
+          borderColor: borderColors,
+          borderWidth: 1,
+        },
+      ],
+    }
+  }, [bySex])
+
+  const barDeptData = useMemo(() => {
+    const labels = byDept.map(d => d.label)
+    const data = byDept.map(d => d.count)
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Contactos',
+          data,
+          backgroundColor: primary + 'CC', // 80% opacity
+          borderColor: primary,
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    }
+  }, [byDept, primary])
+
+  const barAgeData = useMemo(() => {
+    const labels = byAge.map(d => d.label)
+    const data = byAge.map(d => d.count)
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Contactos',
+          data,
+          backgroundColor: '#10B98155',
+          borderColor: '#10B981',
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    }
+  }, [byAge])
+
+  const barOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'white',
+        titleColor: fg,
+        bodyColor: fg,
+        borderColor: border,
+        borderWidth: 1,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: mutedFg, maxRotation: 30, minRotation: 0 },
+      },
+      y: {
+        grid: { color: border },
+        ticks: { color: mutedFg },
+      },
+    },
+  }), [fg, mutedFg, border])
+
+  const pieOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' as const, labels: { color: mutedFg } },
+      tooltip: {
+        backgroundColor: 'white',
+        titleColor: fg,
+        bodyColor: fg,
+        borderColor: border,
+        borderWidth: 1,
+        displayColors: true,
+      },
+    },
+  }), [fg, mutedFg, border])
+
   if (loading) {
     return (
       <div className="p-8 text-center text-gray-500">Cargando estadísticas...</div>
@@ -166,24 +289,9 @@ export function StatsDashboard() {
               <CardDescription>Distribución de contactos por sexo</CardDescription>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={{}} className="h-72">
-                <ResponsiveContainer>
-                  <PieChart>
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Pie
-                      data={bySex}
-                      dataKey="count"
-                      nameKey="label"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      fill="#8884d8"
-                      label
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+              <div className="h-[280px] relative">
+                <Pie data={pieSexData} options={pieOptions} />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -221,15 +329,9 @@ export function StatsDashboard() {
               {byDept.length === 0 ? (
                 <div className="text-sm text-gray-500">Selecciona un Top y pulsa "Aplicar" para cargar este gráfico.</div>
               ) : (
-                <ChartContainer config={{}} className="h-72">
-                  <BarChart data={byDept}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" interval={0} angle={-25} textAnchor="end" height={60} />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="count" fill="#3B82F6" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ChartContainer>
+                <div className="h-[280px] relative">
+                  <Bar data={barDeptData} options={barOptions} />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -297,15 +399,9 @@ export function StatsDashboard() {
               {byAge.length === 0 ? (
                 <div className="text-sm text-gray-500">Selecciona el modo y pulsa "Aplicar" para ver este gráfico.</div>
               ) : (
-                <ChartContainer config={{}} className="h-80">
-                  <BarChart data={byAge}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
-                    <YAxis />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="count" fill="#10B981" radius={[4,4,0,0]} />
-                  </BarChart>
-                </ChartContainer>
+                <div className="h-[320px] relative">
+                  <Bar data={barAgeData} options={barOptions} />
+                </div>
               )}
             </CardContent>
           </Card>

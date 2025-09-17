@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { AuthProvider } from '@/contexts/AuthContext'
-import './globals.css'
+import './globals-clean.css'
 
 export const metadata: Metadata = {
   title: 'CRM Delgado',
@@ -25,7 +25,7 @@ html {
         `}</style>
         <link rel="icon" type="image/png" href="/imb_logo.png" />
         <link rel="apple-touch-icon" href="/imb_logo.png" />
-        <meta name="theme-color" content="#FCBA00" />
+  <meta name="theme-color" content="#b48900" />
       </head>
       <body>
         <AuthProvider>

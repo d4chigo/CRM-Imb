@@ -48,7 +48,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Lado izquierdo branding */}
-      <div className="md:w-1/2 flex flex-col justify-center p-10 text-white relative overflow-hidden" style={{ backgroundColor: '#FCBA00' }}>
+  <div className="md:w-1/2 flex flex-col justify-center p-10 text-white relative overflow-hidden bg-primary">
         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 20% 20%, #ffffff 0, transparent 60%)' }} />
         <div className="relative max-w-md">
           <h1 className="text-4xl font-extrabold mb-4 leading-tight drop-shadow-sm">CRM Inmobiliario</h1>
@@ -66,7 +66,7 @@ export default function LoginPage() {
         <Card className="w-full max-w-md shadow-lg border border-gray-200">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-2xl font-bold flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full" style={{ backgroundColor: '#FCBA00' }}>
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary">
                 <Lock className="h-5 w-5 text-white" />
               </span>
               Acceso
@@ -94,7 +94,7 @@ export default function LoginPage() {
                   <Input id="password" type="password" className="pl-9" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading} />
                 </div>
               </div>
-              <Button type="submit" disabled={isLoading} className="w-full font-semibold text-gray-900 hover:opacity-90 transition" style={{ backgroundColor: '#FCBA00' }}>
+              <Button type="submit" disabled={isLoading} className="w-full font-semibold hover:opacity-90 transition" variant="brand">
                 {isLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Validando...</> : 'Iniciar Sesión'}
               </Button>
               <div className="text-center text-sm text-gray-600">

@@ -120,13 +120,7 @@ export function PipelineBoard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>
-            Pipeline de Ventas
-          </h2>
-          <p className="text-gray-600">Arrastra las oportunidades entre las etapas</p>
-        </div>
+      <div className="flex items-center justify-end flex-wrap gap-2">
         <div className="flex items-center gap-2">
             <Dialog open={manageOpen} onOpenChange={setManageOpen}>
               <DialogTrigger asChild>
@@ -155,14 +149,14 @@ export function PipelineBoard() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button type="submit" className="flex items-center gap-2" style={{ backgroundColor: "#FCBA00" }}>
+                      <Button type="submit" className="flex items-center gap-2" variant="brand">
                         <Plus className="h-4 w-4" /> Agregar
                       </Button>
                     </DialogFooter>
                   </form>
                   <div>
                     <h4 className="text-sm font-semibold mb-2" style={{ color: "#303030" }}>Etapas actuales</h4>
-                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    <div className="space-y-2 pr-1">
                       {columns.map((c: any, index: number) => (
                         <div key={c.id} className="flex flex-col gap-1 rounded border bg-white px-3 py-2 text-xs">
                           <div className="flex items-center justify-between">
@@ -240,7 +234,7 @@ export function PipelineBoard() {
           }
         }
       }}>
-        <div className="w-full overflow-x-auto pb-4">
+  <div className="w-full scroll-x-area pb-4">
           <div className="flex gap-4 min-w-max">
             {filteredColumns.map((column: any) => (
               <div key={column.id} className="w-80 flex-shrink-0">
@@ -278,14 +272,13 @@ export function PipelineBoard() {
                         <div
                           ref={provided.innerRef}
                           {...provided.droppableProps}
-                          className={`space-y-3 min-h-40 max-h-96 overflow-y-auto p-3 rounded-lg transition-all duration-200 ${
+                          className={`space-y-3 p-3 rounded-lg transition-all duration-200 ${
                             snapshot.isDraggingOver
                               ? "bg-gray-100 border-2 border-dashed border-gray-300"
                               : "bg-gray-50/50"
                           }`}
                           style={{
-                            scrollbarWidth: "thin",
-                            scrollbarColor: `${column.color} transparent`,
+                            /* Let page handle vertical scroll. Keep rail compact. */
                           }}
                         >
                           {column.opportunities.map((opportunity: any, index: number) => (

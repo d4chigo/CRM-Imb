@@ -19,7 +19,7 @@ export const initialColumns: Column[] = [
   {
     id: "calificacion",
     title: "Calificación",
-    color: "#FCBA00",
+    color: "var(--primary)",
     opportunities: [], // Datos de ejemplo eliminados - cargar desde BD
   },
   {

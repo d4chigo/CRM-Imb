@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export interface NewContactFormValues {
   nombre: string;
@@ -62,24 +63,24 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-xl p-4">
+      <DialogContent className="max-w-lg sm:max-w-xl p-6">
         <DialogHeader>
-          <DialogTitle className="text-base">Nuevo Contacto</DialogTitle>
+          <DialogTitle className="text-lg">Nuevo Contacto</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Nombre</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Nombre</label>
               <Input name="nombre" value={form.nombre} onChange={handleChange} placeholder="Nombre" className="h-9" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Apellido (opcional)</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Apellido (opcional)</label>
               <Input name="apellido" value={form.apellido || ''} onChange={handleChange} placeholder="Apellido" className="h-9" />
             </div>
           </div>
           {/* Etiqueta (única) */}
           <div className="space-y-2">
-            <label className="text-[11px] font-medium text-gray-600">Etiqueta (elige solo una)</label>
+            <label className="text-[12px] font-medium text-muted-foreground">Etiqueta (elige solo una)</label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[12px]">
               {[
                 'Techo Propio',
@@ -107,71 +108,86 @@ export function NewContactDialog({ open, onOpenChange, onSubmit }: Props) {
             </div>
             {showOther && (
               <div>
-                <label className="text-[11px] font-medium text-gray-600">Especificar</label>
+                <label className="text-[12px] font-medium text-muted-foreground">Especificar</label>
                 <Input name="etiqueta_otro" value={form.etiqueta_otro || ''} onChange={handleChange} placeholder="Ej. Programa especial" className="h-9" />
               </div>
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Email</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Email</label>
               <Input type="email" name="email" value={form.email} onChange={handleChange} placeholder="correo@ejemplo.com" className="h-9" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Teléfono</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Teléfono</label>
               <Input name="telefono" value={form.telefono} onChange={handleChange} placeholder="999999999" className="h-9" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">DNI</label>
+              <label className="text-[12px] font-medium text-muted-foreground">DNI</label>
               <Input name="dni" value={form.dni || ''} onChange={handleChange} placeholder="Ej. 12345678" className="h-9" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Tipo</label>
-              <select name="tipo" value={form.tipo} onChange={handleChange} className="mt-1 w-full border rounded-md h-9 px-2 bg-white text-[13px]">
-                <option value="lead">Lead</option>
-                <option value="prospecto">Prospecto</option>
-                <option value="cliente">Cliente</option>
-              </select>
+              <label className="text-[12px] font-medium text-muted-foreground">Tipo</label>
+              <Select value={form.tipo} onValueChange={(v)=> setForm(f=> ({...f, tipo: v}))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecciona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="prospecto">Prospecto</SelectItem>
+                  <SelectItem value="cliente">Cliente</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Medio de contacto</label>
-              <select name="origen" value={form.origen} onChange={handleChange} className="mt-1 w-full border rounded-md h-9 px-2 bg-white text-[13px]">
-                <option value="web">Web</option>
-                <option value="referido">Referido</option>
-                <option value="llamada">Llamada</option>
-                <option value="evento">Evento</option>
-                <option value="otro">Otro</option>
-              </select>
+              <label className="text-[12px] font-medium text-muted-foreground">Medio de contacto</label>
+              <Select value={form.origen} onValueChange={(v)=> setForm(f=> ({...f, origen: v}))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Selecciona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="web">Web</SelectItem>
+                  <SelectItem value="referido">Referido</SelectItem>
+                  <SelectItem value="llamada">Llamada</SelectItem>
+                  <SelectItem value="evento">Evento</SelectItem>
+                  <SelectItem value="otro">Otro</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Departamento</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Departamento</label>
               <Input name="departamento" value={form.departamento || ''} onChange={handleChange} placeholder="Ej. Lima" className="h-9" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Sexo</label>
-              <select name="sexo" value={form.sexo || ''} onChange={handleChange} className="mt-1 w-full border rounded-md h-9 px-2 bg-white text-[13px]">
-                <option value="">Sin dato</option>
-                <option value="M">Masculino</option>
-                <option value="F">Femenino</option>
-                <option value="O">Otro</option>
-              </select>
+              <label className="text-[12px] font-medium text-muted-foreground">Sexo</label>
+              <Select value={(form.sexo ?? 'none') as any} onValueChange={(v)=> setForm(f=> ({...f, sexo: (v === 'none' ? undefined : (v as any))}))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder="Sin dato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin dato</SelectItem>
+                  <SelectItem value="M">Masculino</SelectItem>
+                  <SelectItem value="F">Femenino</SelectItem>
+                  <SelectItem value="O">Otro</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-600">Fecha Nacimiento</label>
+              <label className="text-[12px] font-medium text-muted-foreground">Fecha Nacimiento</label>
               <Input type="date" name="fecha_nacimiento" value={form.fecha_nacimiento} onChange={handleChange} className="h-9" />
             </div>
           </div>
           <div>
-            <label className="text-[11px] font-medium text-gray-600">Observaciones</label>
-            <Textarea name="notas" value={form.notas} onChange={handleChange} placeholder="Observaciones" className="min-h-[72px] text-[13px]" />
+            <label className="text-[12px] font-medium text-muted-foreground">Observaciones</label>
+            <Textarea name="notas" value={form.notas} onChange={handleChange} placeholder="Observaciones" className="min-h-[88px] text-[13px]" />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-9">Cancelar</Button>
-            <Button disabled={loading} type="submit" style={{ backgroundColor: "#FCBA00" }} className="text-white h-9">{loading? 'Guardando...' : 'Guardar'}</Button>
+            <Button disabled={loading} type="submit" variant="brand" className="h-9">{loading? 'Guardando...' : 'Guardar'}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

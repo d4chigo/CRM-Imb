@@ -90,7 +90,7 @@ export function PropertiesList() {
           </h2>
           <p className="text-gray-600">Catálogo de propiedades disponibles</p>
         </div>
-        <Button style={{ backgroundColor: "#FCBA00" }} className="text-white">
+        <Button variant="brand">
           <Plus className="h-4 w-4 mr-2" />
           Nueva Propiedad
         </Button>
@@ -113,29 +113,23 @@ export function PropertiesList() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
-                variant={selectedStatus === "all" ? "default" : "outline"}
+                variant={selectedStatus === "all" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedStatus("all")}
-                style={selectedStatus === "all" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedStatus === "all" ? "text-white" : ""}
               >
                 Todos los Estados
               </Button>
               <Button
-                variant={selectedStatus === "disponible" ? "default" : "outline"}
+                variant={selectedStatus === "disponible" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedStatus("disponible")}
-                style={selectedStatus === "disponible" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedStatus === "disponible" ? "text-white" : ""}
               >
                 Disponible
               </Button>
               <Button
-                variant={selectedStatus === "reservada" ? "default" : "outline"}
+                variant={selectedStatus === "reservada" ? "brand" : "outline"}
                 size="sm"
                 onClick={() => setSelectedStatus("reservada")}
-                style={selectedStatus === "reservada" ? { backgroundColor: "#FCBA00" } : {}}
-                className={selectedStatus === "reservada" ? "text-white" : ""}
               >
                 Reservada
               </Button>
