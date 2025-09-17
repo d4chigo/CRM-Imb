@@ -41,11 +41,7 @@ export function CotizacionesList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>Cotizaciones</h2>
-          <p className="text-gray-600">Catálogo de servicios según la inmobiliaria</p>
-        </div>
+      <div className="flex items-center justify-end">
         <Dialog open={openCreate} onOpenChange={setOpenCreate}>
           <DialogTrigger asChild>
               <Button variant="brand">

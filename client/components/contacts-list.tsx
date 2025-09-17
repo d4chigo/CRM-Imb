@@ -521,13 +521,7 @@ export function ContactsList() {
 
   return (
     <div className="space-y-6" style={{ paddingBottom: showBottomBar ? 110 : undefined }}>
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>
-            Contactos
-          </h2>
-          <p className="text-gray-600">Gestiona tus leads, prospectos y clientes</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2 items-center">
           {/* Indicador de conexión Google */}
           {googleStatus.connected ? (
