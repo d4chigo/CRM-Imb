@@ -128,7 +128,7 @@ body {
 
 /* Horizontal scroll styling for rails (e.g., Pipeline) */
 .scroll-x-area {
-  overflow-x: auto;
+  overflow-x: scroll; /* barra horizontal siempre visible para mover las etapas */
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
@@ -148,20 +148,25 @@ body {
 
 /* Pipeline viewport: container adaptativo con scroll horizontal visible */
 .pipeline-viewport {
-  min-height: 0;
+  min-height: 160px;
   /* Permitir solo scroll horizontal, altura fija sin scroll vertical interno */
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
+  /* Reservar espacio para la barra y evitar saltos de layout */
+  scrollbar-gutter: stable;
+  /* Un pequeño padding inferior para que la barra no quede "pegada" al contenido */
+  padding-bottom: 8px;
   /* Aplicar el mismo estilo de scrollbar que scroll-x-area */
   scrollbar-width: thin;
-  scrollbar-color: var(--primary) transparent;
+  scrollbar-color: var(--primary) rgba(0,0,0,0.06);
 }
 
 .pipeline-viewport::-webkit-scrollbar {
-  height: 10px;
+  height: 12px;
 }
 .pipeline-viewport::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0,0,0,0.06);
+  border-radius: 999px;
 }
 .pipeline-viewport::-webkit-scrollbar-thumb {
   background-color: color-mix(in srgb, var(--primary) 70%, #000 0%);
