@@ -39,6 +39,11 @@
   --sidebar-active: #FCBA00;
 }
 
+/* Cuando el sidebar está colapsado, permite ver más columnas (reduce gap global) */
+.app-shell.collapsed .pipeline-columns {
+  gap: 0.5rem;
+}
+
 .dark {
   --background: #121212;
   --foreground: #F5F5F5;
@@ -87,6 +92,19 @@ html, body {
   min-height: 0; /* allow children to define overflow */
   background: var(--background);
 }
+/* Estado colapsado: sidebar angosto y etiquetas ocultas */
+.app-shell.collapsed {
+  grid-template-columns: 64px 1fr;
+}
+.app-shell.collapsed .sidebar .nav-item {
+  justify-content: center;
+}
+.app-shell.collapsed .sidebar .nav-item .nav-label {
+  display: none;
+}
+.app-shell.collapsed .sidebar .mt-6, .app-shell.collapsed .sidebar .mt-auto + div { /* tarjeta de sesión */
+  display: none;
+}
 .app-shell .sidebar {
   background: var(--sidebar-bg);
   color: var(--sidebar-foreground);
@@ -126,7 +144,104 @@ body {
   overflow: hidden;
 }
 
-/* Horizontal scroll styling for rails (e.g., Pipeline) */
+/* Pipeline compact typography (sin layout) */
+.pipeline-opportunity-title {
+  font-size: clamp(0.68rem, 1vw, 0.78rem);
+  font-weight: 600;
+}
+.pipeline-opportunity-service {
+  font-size: clamp(0.56rem, 0.92vw, 0.68rem);
+}
+.pipeline-opportunity-value {
+  font-size: clamp(0.58rem, 0.95vw, 0.7rem);
+  font-weight: 600;
+}
+.pipeline-opportunity-meta {
+  font-size: clamp(0.46rem, 0.75vw, 0.58rem);
+}
+
+/* Pipeline minimal layout (horizontal columns, altura limitada) */
+.pipeline-viewport {
+  width: 100%;
+  /* Limitar la altura total del tablero para que no crezca indefinidamente */
+  min-height: 380px;
+  height: clamp(360px, 58vh, 820px);
+  max-height: 78vh;
+  overflow-x: auto;
+  overflow-y: auto; /* permitir algo de scroll vertical si hay muchas tarjetas */
+  -webkit-overflow-scrolling: touch;
+  /* Snap horizontal para mejor UX en pantallas pequeñas */
+  scroll-snap-type: x mandatory;
+  touch-action: pan-y pan-x;
+}
+.pipeline-columns {
+  display: flex;
+  flex-wrap: nowrap; /* mantener columnas al costado, no una bajo otra */
+  align-items: flex-start;
+  gap: clamp(0.5rem, 1vw, 0.75rem); /* espacio entre columnas compacto */
+  min-width: max-content; /* evita colapso cuando hay pocas columnas */
+}
+.pipeline-column {
+  flex: 0 0 auto; /* no crecer, no encoger */
+  min-width: clamp(220px, 40vw, 280px);
+  width: clamp(220px, 40vw, 300px);
+  scroll-snap-align: start;
+}
+
+/* Breakpoints */
+@media (min-width: 640px) {
+  .pipeline-viewport { height: clamp(420px, 62vh, 840px); }
+  .pipeline-column { min-width: clamp(260px, 36vw, 320px); width: clamp(260px, 36vw, 340px); }
+}
+@media (min-width: 768px) {
+  .pipeline-viewport { height: clamp(460px, 64vh, 860px); }
+  .pipeline-column { min-width: clamp(260px, 30vw, 320px); width: clamp(260px, 30vw, 340px); }
+}
+@media (min-width: 1024px) {
+  .pipeline-viewport { height: clamp(480px, 66vh, 880px); }
+  /* Desktop: objetivo 5 columnas visibles */
+  .pipeline-column { min-width: 210px; width: 210px; }
+}
+
+@media (min-width: 1280px) {
+  .pipeline-viewport { height: clamp(500px, 68vh, 900px); }
+  .pipeline-column { min-width: 210px; width: 220px; }
+}
+
+/* Compactar cabeceras de columna y badges sin depender de pipeline.css */
+.pipeline-card-title { font-size: clamp(0.72rem, 1.05vw, 0.9rem); }
+.pipeline-card-badge { font-size: 0.68rem; line-height: 1; padding: 0.08rem 0.3rem; }
+.pipeline-card-header { padding: 0.4rem 0.5rem !important; }
+.pipeline-card-content { padding: 0.5rem 0.6rem !important; }
+.pipeline-search-button { font-size: 0.7rem; height: 1.6rem; padding: 0 0.4rem; }
+.pipeline-icon-xs, .pipeline-icon-xxs { width: 14px; height: 14px; }
+
+/* Listado de oportunidades con scroll vertical por columna */
+.pipeline-opportunities-list {
+  max-height: calc(55vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px; /* espacio para scrollbar */
+  scrollbar-width: thin;
+}
+@media (min-width: 640px) {
+  .pipeline-opportunities-list { max-height: calc(57vh); }
+}
+@media (min-width: 1024px) {
+  .pipeline-opportunities-list { max-height: calc(59vh); }
+}
+@media (min-width: 1280px) {
+  .pipeline-opportunities-list { max-height: calc(60vh); }
+}
+
+/* Header del Pipeline: asegurar que el botón "Gestionar etapas" siempre tenga espacio */
+.pipeline-header { gap: 0.5rem; padding: 0.5rem 0.6rem; }
+.pipeline-title { font-size: clamp(0.95rem, 1.4vw, 1.05rem); }
+
+/* Ocultar panel de debug */
+.debug-pipeline { display: none !important; }
+
+/* Horizontal scroll styling for rails (e.g., Pipeline) — mantenemos utilidades genéricas */
 .scroll-x-area {
   overflow-x: scroll; /* barra horizontal siempre visible para mover las etapas */
   overflow-y: hidden;
@@ -134,51 +249,12 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) transparent;
 }
-.scroll-x-area::-webkit-scrollbar {
-  height: 10px;
-}
-.scroll-x-area::-webkit-scrollbar-track {
-  background: transparent;
-}
+.scroll-x-area::-webkit-scrollbar { height: 10px; }
+.scroll-x-area::-webkit-scrollbar-track { background: transparent; }
 .scroll-x-area::-webkit-scrollbar-thumb {
   background-color: color-mix(in srgb, var(--primary) 70%, #000 0%);
   border-radius: 999px;
   border: 2px solid transparent;
 }
 
-/* Pipeline viewport: container adaptativo con scroll horizontal visible */
-.pipeline-viewport {
-  min-height: 160px;
-  /* Permitir solo scroll horizontal, altura fija sin scroll vertical interno */
-  overflow-x: scroll;
-  overflow-y: hidden;
-  /* Reservar espacio para la barra y evitar saltos de layout */
-  scrollbar-gutter: stable;
-  /* Un pequeño padding inferior para que la barra no quede "pegada" al contenido */
-  padding-bottom: 8px;
-  /* Aplicar el mismo estilo de scrollbar que scroll-x-area */
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary) rgba(0,0,0,0.06);
-}
-
-.pipeline-viewport::-webkit-scrollbar {
-  height: 12px;
-}
-.pipeline-viewport::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.06);
-  border-radius: 999px;
-}
-.pipeline-viewport::-webkit-scrollbar-thumb {
-  background-color: color-mix(in srgb, var(--primary) 70%, #000 0%);
-  border-radius: 999px;
-  border: 2px solid transparent;
-}
-
-/* Contenedor interno para las columnas */
-.pipeline-columns {
-  display: flex;
-  gap: 1rem;
-  padding: 0.5rem;
-  min-width: max-content;
-  height: 100%;
-}
+/* (las reglas del pipeline viven en client/styles/pipeline.css) */

@@ -36,11 +36,23 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loaded) return; // ya hidratado
     let mounted = true;
+    // Mostrar columnas locales de inmediato para evitar pantalla en blanco
+    setColumns(initialColumns);
     (async () => {
       try {
-        const apiStages = await fetchStages();
+        let apiStages: Array<{ id: string; title: string; color: string }> = []
+        try {
+          apiStages = await fetchStages();
+        } catch (e) {
+          // Si falla la API, seguimos con fallback
+          console.warn('fetchStages falló, usando columnas iniciales.');
+        }
         if (!mounted) return;
-        let mapped: Column[] = apiStages.map(s => ({ id: s.id, title: s.title, color: s.color, opportunities: [] }));
+        // Fallback seguro: si no hay etapas en la API, usar las columnas iniciales locales
+        let mapped: Column[] = (apiStages && apiStages.length > 0
+          ? apiStages
+          : initialColumns
+        ).map(s => ({ id: s.id as string, title: s.title as string, color: (s as any).color || '#6366F1', opportunities: [] }));
         mapped = mapped.sort((a,b) => {
           const ia = canonicalStageOrder.indexOf(a.id);
             const ib = canonicalStageOrder.indexOf(b.id);
@@ -78,10 +90,15 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
         } catch(e) {
           console.warn('PipelineProvider: no se pudieron cargar oportunidades.', (e as any)?.message);
         }
-    setColumns(mapped);
-    setLoaded(true);
+        // Solo actualizar si hay alguna etapa
+        if (mapped.length > 0) setColumns(mapped);
+        setLoaded(true);
       } catch(_) {
-        // Silenciar errores iniciales
+        // Silenciar errores iniciales, pero garantizar que haya columnas visibles
+        if (mounted) {
+          setColumns(initialColumns);
+          setLoaded(true);
+        }
       }
     })();
     return () => { mounted = false; };

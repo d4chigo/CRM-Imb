@@ -153,17 +153,35 @@ function CreateCotizacionDialog({ onCreated }:{ onCreated: (c: CotizacionDTO)=> 
   const [mantenimientoMensual, setMantenimientoMensual] = useState<string>("")
   const [fechaEntrega, setFechaEntrega] = useState<string>("")
   const [amoblado, setAmoblado] = useState<boolean>(false)
+  // Items de detalle
+  const [items, setItems] = useState<Array<{ descripcion: string; cantidad: number; precioUnit: number }>>([])
+  // Financiamiento
+  const [programa, setPrograma] = useState<'techo_propio'|'mivivienda'|'directo'>('mivivienda')
+  const [tasaAnual, setTasaAnual] = useState<string>("12")
+  const [plazoMeses, setPlazoMeses] = useState<string>("240")
+  const [cuotaInicialPct, setCuotaInicialPct] = useState<string>("10")
+  const [bono, setBono] = useState<string>("0")
   const [saving, setSaving] = useState(false)
   // Totals helpers
   const currencySymbol = moneda === 'PEN' ? 'S/' : '$'
   const parsedPrecio = Number(precioBase || 0)
+  const itemsSubtotal = items.reduce((acc, it) => acc + (Number(it.cantidad||0) * Number(it.precioUnit||0)), 0)
   const parsedDesc = Math.min(100, Math.max(0, Number(descuentoPorcentaje || 0)))
   const parsedIgv = Math.min(100, Math.max(0, Number(igvPorcentaje || 0)))
-  const subtotal = isNaN(parsedPrecio) ? 0 : parsedPrecio
+  const subtotal = (isNaN(parsedPrecio) ? 0 : parsedPrecio) + itemsSubtotal
   const descAmt = subtotal * (parsedDesc / 100)
   const baseAfterDesc = Math.max(0, subtotal - descAmt)
   const igvAmt = incluyeIgv ? 0 : baseAfterDesc * (parsedIgv / 100)
   const total = incluyeIgv ? baseAfterDesc : baseAfterDesc + igvAmt
+  // Financiamiento (cuota aprox.)
+  const tasaMensual = Math.max(0, Number(tasaAnual||0)) / 100 / 12
+  const plazo = Math.max(1, Number(plazoMeses||1))
+  const cuotaInicial = (Math.max(0, Number(cuotaInicialPct||0)) / 100) * total
+  const bonoNum = Math.max(0, Number(bono||0))
+  const montoFinanciar = Math.max(0, total - cuotaInicial - bonoNum)
+  const cuotaMensual = tasaMensual > 0
+    ? (montoFinanciar * tasaMensual) / (1 - Math.pow(1 + tasaMensual, -plazo))
+    : montoFinanciar / plazo
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -190,7 +208,11 @@ function CreateCotizacionDialog({ onCreated }:{ onCreated: (c: CotizacionDTO)=> 
         estado: estado.trim() || undefined,
         mantenimientoMensual: mantenimientoMensual ? Number(mantenimientoMensual) : undefined,
         fechaEntrega: fechaEntrega || undefined,
-        amoblado
+        amoblado,
+        itemsJson: {
+          items,
+          financing: { programa, tasaAnual: Number(tasaAnual||0), plazoMeses: plazo, cuotaInicialPct: Number(cuotaInicialPct||0), bono: bonoNum, montoFinanciar, cuotaMensual }
+        }
       })
       toast({ title:'Guardado', description: created.nombre })
       onCreated(created)

@@ -1,9 +1,5 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-function authHeaders(): Record<string,string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}`, 'Content-Type':'application/json' } : { 'Content-Type':'application/json' };
-}
+import { authService } from '@/lib/auth';
 
 export interface OpportunityDTO {
   id?: number;
@@ -20,11 +16,12 @@ export interface OpportunityDTO {
 }
 
 export async function listOpportunities(): Promise<OpportunityDTO[]> {
-  const res = await fetch(`${API_BASE_URL}/api/opportunities`, { headers: authHeaders(), credentials:'include' });
+  const res = await authService.authenticatedFetch(`/api/opportunities`, { method:'GET' });
   if(!res.ok) throw new Error('Error listando oportunidades');
   const data = await res.json();
   return data.data || [];
 }
+
 export async function createOpportunity(o: OpportunityDTO): Promise<OpportunityDTO> {
   // Sanitizar: no enviar campos vacíos que disparen validaciones (ej: email="")
   const payload: any = { ...o };
@@ -38,7 +35,7 @@ export async function createOpportunity(o: OpportunityDTO): Promise<OpportunityD
   if (payload.probabilidad === undefined || payload.probabilidad === null) payload.probabilidad = 0;
   if (payload.valorUsd === undefined || payload.valorUsd === null) payload.valorUsd = 0;
 
-  const res = await fetch(`${API_BASE_URL}/api/opportunities`, { method:'POST', headers: authHeaders(), body: JSON.stringify(payload), credentials:'include' });
+  const res = await authService.authenticatedFetch(`/api/opportunities`, { method:'POST', body: JSON.stringify(payload) });
   if(!res.ok) {
     let detail = ''
     try { 
@@ -55,14 +52,16 @@ export async function createOpportunity(o: OpportunityDTO): Promise<OpportunityD
   const data = await res.json();
   return data.data;
 }
+
 export async function updateOpportunity(id:number, patch: Partial<OpportunityDTO>): Promise<OpportunityDTO> {
-  const res = await fetch(`${API_BASE_URL}/api/opportunities/${id}`, { method:'PATCH', headers: authHeaders(), body: JSON.stringify(patch), credentials:'include' });
+  const res = await authService.authenticatedFetch(`/api/opportunities/${id}`, { method:'PATCH', body: JSON.stringify(patch) });
   if(!res.ok) throw new Error('Error actualizando oportunidad');
   const data = await res.json();
   return data.data;
 }
+
 export async function deleteOpportunity(id:number): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/api/opportunities/${id}`, { method:'DELETE', headers: authHeaders(), credentials:'include' });
+  const res = await authService.authenticatedFetch(`/api/opportunities/${id}`, { method:'DELETE' });
   if(!res.ok) throw new Error('Error eliminando oportunidad');
 }
 

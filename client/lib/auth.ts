@@ -28,6 +28,7 @@ class AuthService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && (window as any).process?.versions?.electron ? { 'X-Client': 'electron' } : {}),
         },
         credentials: 'include', // Para incluir cookies de refresh token
         body: JSON.stringify({ nombre: userData.name, email: userData.email, password: userData.password, rol: userData.role }),
@@ -36,10 +37,12 @@ class AuthService {
       const raw = await response.json();
       const token = raw.token || raw.accessToken || raw.data?.accessToken;
       const user = raw.user || raw.data?.user;
+      const rtoken = raw.refreshToken || raw.data?.refreshToken;
 
       if (raw.success && token) {
         this.setToken(token);
         if (user) this.setUser(user);
+        if (rtoken) this.setRefreshToken(rtoken);
       }
 
       return { success: !!raw.success, message: raw.message || (raw.success ? 'Registro exitoso' : 'Error en registro'), user, token };
@@ -57,6 +60,7 @@ class AuthService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && (window as any).process?.versions?.electron ? { 'X-Client': 'electron' } : {}),
         },
         credentials: 'include', // Para incluir cookies de refresh token
         body: JSON.stringify(credentials),
@@ -65,10 +69,12 @@ class AuthService {
       const raw = await response.json();
       const token = raw.token || raw.accessToken || raw.data?.accessToken; // backend usa data.accessToken
       const user = raw.user || raw.data?.user;
+      const rtoken = raw.refreshToken || raw.data?.refreshToken;
 
       if (raw.success && token) {
         this.setToken(token);
         if (user) this.setUser(user);
+        if (rtoken) this.setRefreshToken(rtoken);
       }
 
       return { success: !!raw.success, message: raw.message || (raw.success ? 'Login exitoso' : 'Credenciales inválidas'), user, token };
@@ -99,8 +105,19 @@ class AuthService {
    */
   async refreshToken(): Promise<boolean> {
     try {
+      // Si estamos en Electron o el navegador no guarda cookies, mandar el refresh token por header
+      const rtoken = this.getRefreshToken();
+      const isElectron = typeof window !== 'undefined' && (window as any).process?.versions?.electron;
+      const headers: Record<string,string> = {};
+      if (rtoken) {
+        headers['Authorization'] = `Bearer ${rtoken}`;
+      }
+      if (isElectron) {
+        headers['X-Client'] = 'electron';
+      }
       const r = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
         method: 'POST',
+        headers,
         credentials: 'include',
       });
 
@@ -182,23 +199,44 @@ class AuthService {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('authToken');
       localStorage.removeItem('currentUser');
+      localStorage.removeItem('refreshToken');
     }
+  }
+
+  /** Persistencia de refresh token para clientes sin cookies */
+  private setRefreshToken(token: string) {
+    if (typeof window !== 'undefined') localStorage.setItem('refreshToken', token);
+  }
+  private getRefreshToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('refreshToken');
   }
 
   /**
    * Realizar petición autenticada a la API
    */
   async authenticatedFetch(url: string, options: RequestInit = {}): Promise<Response> {
-    const token = this.getToken();
-    
-    if (!token) {
-      throw new Error('No hay token de autenticación');
+    let token = this.getToken();
+    // Intentar refrescar si no hay token o está por expirar
+    if (!token || this.isTokenExpired()) {
+      const refreshed = await this.refreshToken();
+      token = this.getToken();
+      if (!refreshed || !token) {
+        // Si no se puede refrescar, limpiar y redirigir a login
+        this.clearAuth();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        throw new Error('No hay token de autenticación');
+      }
     }
 
-    const headers = {
+    const isElectron = typeof window !== 'undefined' && (window as any).process?.versions?.electron;
+    const headers: Record<string,string> = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      ...options.headers,
+      ...(isElectron ? { 'X-Client': 'electron' } : {}),
+      ...(options.headers as any),
     };
 
     const response = await fetch(`${API_BASE_URL}${url}`, {

@@ -57,7 +57,6 @@ function DashboardInner() {
   }[activeTab] || 'Gestiona tu CRM con una interfaz clara y moderna.'
 
   return (
-    <PipelineProvider>
       <AppShell title="CRM Inmobiliario">
         {/* Section header (replaces duplicate tab bar) */}
         <div className="mb-4">
@@ -115,7 +114,6 @@ function DashboardInner() {
           </TabsContent>
         </Tabs>
       </AppShell>
-    </PipelineProvider>
   )
 }
 

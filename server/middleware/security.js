@@ -42,24 +42,29 @@ const apiLimiter = rateLimit({
  */
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir requests sin origin (aplicaciones móviles, Postman, etc.)
+    // Permitir requests sin origin (aplicaciones móviles, Postman, Electron, SSR, etc.)
     if (!origin) return callback(null, true);
-    
-    // Lista de dominios permitidos
+
+    // Permitir localhost/127.0.0.1 y cualquier host de la red local 192.168.x.x en el puerto 3000 (Next dev)
+    const localHostRegex = /^http:\/\/(localhost|127\.0\.0\.1)(:\\d+)?$/i;
+    const lanRegex = /^http:\/\/192\.168\.\d+\.\d+(?::\d+)?$/i;
+
     const allowedOrigins = [
       config.frontendUrl,
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      // Agregar más dominios en producción si es necesario
-    ];
-    
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('No permitido por política CORS'));
+    ].filter(Boolean);
+
+    if (
+      allowedOrigins.includes(origin) ||
+      localHostRegex.test(origin) ||
+      lanRegex.test(origin)
+    ) {
+      return callback(null, true);
     }
+    return callback(new Error('No permitido por política CORS'));
   },
-  credentials: true, // Permitir cookies
+  credentials: true, // Permitir cookies (refresh tokens)
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
@@ -73,7 +78,8 @@ const helmetOptions = {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+      // Permitir imágenes por http en entorno local (logo servido por el cliente)
+      imgSrc: ["'self'", "data:", "https:", "http:"],
     },
   },
   crossOriginEmbedderPolicy: false, // Deshabilitar para desarrollo

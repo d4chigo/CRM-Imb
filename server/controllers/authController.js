@@ -71,18 +71,23 @@ class AuthController {
       res.cookie('refreshToken', authResult.tokens.refreshToken, {
         httpOnly: true, // No accesible desde JavaScript (seguridad XSS)
         secure: process.env.NODE_ENV === 'production', // HTTPS en producción
-        sameSite: 'strict', // Protección CSRF
+        // En desarrollo permitimos LAX para requests cross-origin (frontend en 192.168.x.x:3000 / localhost:3000)
+        // En producción mantenemos 'strict' para mayor protección CSRF
+        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
       });
 
       // Respuesta exitosa
+      const isElectron = (req.headers['x-client'] === 'electron');
+      const isDev = process.env.NODE_ENV !== 'production';
       res.json({
         success: true,
         message: 'Login exitoso',
         data: {
           user: authResult.user,
           accessToken: authResult.tokens.accessToken,
-          // No enviar refresh token en JSON por seguridad
+          // En desarrollo o cliente Electron, exponemos refreshToken para apps sin cookies (ej: Electron)
+          ...(isDev || isElectron ? { refreshToken: authResult.tokens.refreshToken } : {})
         }
       });
 
@@ -105,7 +110,16 @@ class AuthController {
    */
   static async refresh(req, res) {
     try {
-      const refreshToken = req.cookies.refreshToken;
+      // Intentar obtener refresh token desde cookie o headers (para clientes sin cookies como Electron)
+      let refreshToken = req.cookies.refreshToken;
+      if (!refreshToken) {
+        const auth = req.headers['authorization'];
+        if (auth && auth.toLowerCase().startsWith('bearer ')) {
+          refreshToken = auth.slice(7);
+        } else if (req.headers['x-refresh-token']) {
+          refreshToken = req.headers['x-refresh-token'];
+        }
+      }
 
       if (!refreshToken) {
         return res.status(401).json({

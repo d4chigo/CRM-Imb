@@ -3,7 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, Search, Users, LayoutGrid, BarChart3, CalendarDays, FileText, LogOut, Building2, Settings } from "lucide-react"
+import { Bell, Search, Users, LayoutGrid, BarChart3, CalendarDays, FileText, LogOut, Building2, Settings, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -38,8 +38,10 @@ export function AppShell({
     { key: "statistics", label: "Estadísticas" },
   ]
 
+  const [collapsed, setCollapsed] = React.useState(false)
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell${collapsed ? " collapsed" : ""}`}>
       {/* Sidebar */}
       <aside className="sidebar px-4 py-6">
         <div className="flex items-center gap-3 px-2 mb-6">
@@ -61,7 +63,7 @@ export function AppShell({
               aria-current={activeTab === item.key ? "page" : undefined}
             >
               <span className="text-white/90">{NavIcon[item.key]}</span>
-              <span className="text-white/90">{item.label}</span>
+              <span className="text-white/90 nav-label">{item.label}</span>
             </button>
           ))}
         </nav>
@@ -92,6 +94,9 @@ export function AppShell({
         <header className="topbar">
           <div className="flex items-center justify-between h-14 px-5">
             <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" aria-label="Alternar menú" onClick={() => setCollapsed(v=>!v)} className="inline-flex">
+                {collapsed ? <PanelLeftOpen className="size-5"/> : <PanelLeftClose className="size-5"/>}
+              </Button>
               <h1 className="text-[15px] font-semibold text-foreground">{title}</h1>
             </div>
             <div className="flex items-center gap-3">

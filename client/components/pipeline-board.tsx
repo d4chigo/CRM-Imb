@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
-import { Phone, Mail, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target, BarChart3 } from "lucide-react"
+import { Phone, MessageCircle, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target, BarChart3 } from "lucide-react"
 // Ahora el estado se obtiene del PipelineContext global
 import { calculateColumnTotal, canonicalStageOrder } from "@/hooks/use-pipeline-dnd"
+import { initialColumns } from "@/data/pipeline"
 import { usePipeline } from '@/contexts/PipelineContext'
 import { fetchStages, createStage, deleteStage, updateStage } from "@/lib/pipelineStages"
 import { formatCurrency } from "@/lib/currency"
@@ -38,6 +39,43 @@ export function PipelineBoard() {
     return columns.map((c:any) => ({ ...c, opportunities: c.opportunities.filter((o:any) => o.clientName.toLowerCase().includes(searchTerm.toLowerCase()) || o.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) || o.agent.toLowerCase().includes(searchTerm.toLowerCase())) }))
   }, [columns, searchTerm])
   const { toast } = useToast()
+  // Abrir WhatsApp con el número de la oportunidad (helper dentro del componente)
+  const openWhatsApp = (rawPhone?: string, name?: string) => {
+    if (!rawPhone || rawPhone.trim() === '') {
+      toast({ title: 'Sin teléfono', description: 'Esta oportunidad no tiene número registrado.', variant: 'destructive' })
+      return
+    }
+    const cleaned = rawPhone.replace(/[^0-9]/g, '')
+    if (!cleaned) {
+      toast({ title: 'Teléfono inválido', description: 'No se pudo interpretar el número.', variant: 'destructive' })
+      return
+    }
+    const withCc = cleaned.startsWith('51') ? cleaned : `51${cleaned}` // default Perú (+51)
+    const message = `Hola ${name || ''}`.trim()
+    const url = `https://wa.me/${withCc}${message ? `?text=${encodeURIComponent(message)}` : ''}`
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank')
+    }
+  }
+
+  // Iniciar llamada telefónica con el número del contacto (tel:)
+  const openPhoneCall = (rawPhone?: string) => {
+    if (!rawPhone || rawPhone.trim() === '') {
+      toast({ title: 'Sin teléfono', description: 'Esta oportunidad no tiene número registrado.', variant: 'destructive' })
+      return
+    }
+    const cleaned = rawPhone.replace(/[^0-9]/g, '')
+    if (!cleaned) {
+      toast({ title: 'Teléfono inválido', description: 'No se pudo interpretar el número.', variant: 'destructive' })
+      return
+    }
+    const withCc = cleaned.startsWith('51') ? cleaned : `51${cleaned}` // default Perú (+51)
+    const telUrl = `tel:+${withCc}`
+    if (typeof window !== 'undefined') {
+      // Preferimos cambiar la ubicación para que algunos navegadores móviles lo manejen mejor
+      window.location.href = telUrl
+    }
+  }
 
   // Estado de diálogos
   const [openEmail, setOpenEmail] = React.useState(false)
@@ -75,18 +113,28 @@ export function PipelineBoard() {
   }
 
   async function handleRemoveStage(id: string, title: string) {
-  const col = columns.find((c: any) => c.id === id)
+    const col = columns.find((c: any) => c.id === id)
     if (!col) return
     if (col.opportunities.length > 0) {
       const proceed = window.confirm(`La etapa "${title}" contiene ${col.opportunities.length} oportunidades. ¿Eliminar igualmente? Esta acción no elimina oportunidades, solo las dejará huérfanas hasta que agreguemos re-asignación.`)
       if (!proceed) return
     }
+    let apiError: any = null
     try {
       await deleteStage(id)
-      const ok = removeColumn(id, { force: true })
-      toast({ title: ok ? 'Etapa eliminada' : 'Etapa eliminada en servidor', description: title })
     } catch (err: any) {
-      toast({ title: 'Error eliminando', description: err.message || 'No se pudo eliminar', variant: 'destructive' })
+      apiError = err
+      console.warn('deleteStage falló, eliminando localmente:', err?.message)
+    }
+    const ok = removeColumn(id, { force: true })
+    if (ok) {
+      toast({
+        title: 'Etapa eliminada',
+        description: apiError ? `${title} (se eliminó localmente; servidor respondió error)` : title,
+        variant: apiError ? 'default' : 'default'
+      })
+    } else if (apiError) {
+      toast({ title: 'No se pudo eliminar', description: apiError.message || 'Error de servidor', variant: 'destructive' })
     }
   }
 
@@ -212,6 +260,17 @@ export function PipelineBoard() {
     }
   }, [checkScrollButtons, filteredColumns.length, getScrollStep])
 
+  // Fallback robusto: si el estado global no tiene columnas, usar iniciales.
+  // Para evitar que un filtro vacío o un error de búsqueda esconda las cabeceras,
+  // preferimos renderizar las columnas base (sin filtro) cuando no hay resultados.
+  const renderColumns = (columns && columns.length > 0) ? columns : initialColumns
+  // Conjunto final a renderizar en UI: si hay filtro y devuelve columnas, úsalo; si no, usa renderColumns
+  const toRender = (filteredColumns && filteredColumns.length > 0) ? filteredColumns : renderColumns
+  // Debug: trazas para verificar cantidades en runtime
+  if (typeof window !== 'undefined') {
+    console.debug('[Pipeline] columnas en contexto:', columns?.length, 'renderColumns:', renderColumns?.length)
+  }
+
   return (
     <div className="pipeline-container space-y-1 sm:space-y-2 w-full p-1">
       {/* Header principal con título */}
@@ -223,10 +282,9 @@ export function PipelineBoard() {
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           <Dialog open={manageOpen} onOpenChange={setManageOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="flex items-center gap-1 text-xs h-6 sm:h-7 px-2">
-                <Settings2 className="h-3 w-3" /> 
-                <span className="hidden sm:inline">Etapas</span>
-                <span className="sm:hidden">E</span>
+              <Button variant="outline" size="sm" className="flex items-center gap-1 text-xs h-6 sm:h-7 px-2" aria-label="Gestionar etapas del pipeline">
+                <Settings2 className="h-3 w-3" />
+                <span>Gestionar etapas</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -415,7 +473,27 @@ export function PipelineBoard() {
         </div>
       </div>
 
-  <DragDropContext onDragEnd={async (result) => {
+      {/* Debug visual (temporal): información de columnas renderizadas */}
+      <div className="text-[11px] text-gray-500 mb-1 debug-pipeline">
+        <span>Cols: {toRender?.length ?? 0}</span>
+        <span className="ml-2">[{toRender?.map((c:any)=>c.title).join(', ')}]</span>
+      </div>
+
+      {/* Fallback visual si no hay columnas */}
+      {(!filteredColumns || filteredColumns.length === 0) && (
+        <div className="w-full py-10 flex flex-col items-center justify-center text-center border rounded bg-white/60">
+          <p className="text-sm text-gray-600 mb-3">No hay etapas para mostrar.</p>
+          <Button
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => setColumns(initialColumns)}
+          >
+            Cargar etapas por defecto
+          </Button>
+        </div>
+      )}
+
+      <DragDropContext onDragEnd={async (result) => {
         const { destination, source, draggableId } = result
         const from = source?.droppableId
         const to = destination?.droppableId
@@ -458,12 +536,24 @@ export function PipelineBoard() {
         {/* Viewport mejorado con mejor diseño responsive */}
         <div
           ref={scrollRef}
-          className="pipeline-viewport scrollbar-hide"
+          className="pipeline-viewport"
         >
           <div className="pipeline-columns">
-            {filteredColumns.map((column: any) => (
+            {toRender.length === 0 && (
+              <div className="pipeline-column" style={{ minWidth: 260 }}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Etapa (demo)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div>Columna de prueba para verificar CSS</div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            {toRender.map((column: any) => (
               <div key={column.id} className="pipeline-column">
-                <Card className="shadow-md border-0 hover:shadow-lg transition-all duration-300 bg-white/90 backdrop-blur-sm h-full">
+                <Card className="shadow-md border-0 hover:shadow-lg transition-all duration-300 bg-white/90 backdrop-blur-sm">
                   <CardHeader 
                     className="pipeline-card-header rounded-t-lg relative overflow-hidden" 
                     style={{ 
@@ -480,12 +570,14 @@ export function PipelineBoard() {
                     />
                     <div className="relative z-10">
                       <div className="flex items-center justify-between mb-1 sm:mb-2">
+                        {/* Título de la columna (no draggable) */}
                         <CardTitle className="pipeline-card-title flex items-center space-x-1">
                           <div 
                             className="w-2 h-2 sm:w-3 sm:h-3 rounded-full shadow-md border border-white" 
                             style={{ backgroundColor: column.color }} 
+                            title={column.title}
                           />
-                          <span className="text-gray-800 truncate">{column.title}</span>
+                          <span className="text-gray-800 truncate select-none">{column.title}</span>
                         </CardTitle>
                         <Badge
                           variant="secondary"
@@ -527,40 +619,40 @@ export function PipelineBoard() {
                   
                   <CardContent className="pipeline-card-content pt-0 pb-1 sm:pb-2">
                     <Droppable droppableId={column.id}>
-                      {(provided, snapshot) => (
+                      {(dropProvided, dropSnapshot) => (
                         <div
-                          ref={provided.innerRef}
-                          {...provided.droppableProps}
+                          ref={dropProvided.innerRef}
+                          {...dropProvided.droppableProps}
                           className={`pipeline-opportunities-list space-y-1 sm:space-y-2 rounded-lg transition-all duration-300 ${
-                            snapshot.isDraggingOver
+                            dropSnapshot.isDraggingOver
                               ? `bg-gradient-to-br from-${column.color}/10 to-${column.color}/5 border-2 border-dashed scale-[1.02] shadow-inner`
                               : "bg-gray-50/40 hover:bg-gray-50/60"
                           }`}
                           style={{
-                            borderColor: snapshot.isDraggingOver ? column.color : 'transparent',
-                            transform: snapshot.isDraggingOver ? 'scale(1.02)' : 'scale(1)',
+                            borderColor: dropSnapshot.isDraggingOver ? column.color : 'transparent',
+                            transform: dropSnapshot.isDraggingOver ? 'scale(1.02)' : 'scale(1)',
                           }}
                         >
                           {column.opportunities.map((opportunity: any, index: number) => (
                             <Draggable key={opportunity.id} draggableId={opportunity.id} index={index}>
-                              {(provided, snapshot) => (
+                              {(dragProvided, dragSnapshot) => (
                                 <Card
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
                                   className={`cursor-grab active:cursor-grabbing transition-all duration-300 border-0 ${
-                                    snapshot.isDragging
+                                    dragSnapshot.isDragging
                                       ? "shadow-2xl rotate-2 scale-105 z-50"
                                       : "hover:shadow-md hover:-translate-y-1 shadow-sm"
                                   }`}
                                   style={{
-                                    ...provided.draggableProps.style,
-                                    background: snapshot.isDragging 
+                                    ...dragProvided.draggableProps.style,
+                                    background: dragSnapshot.isDragging 
                                       ? `linear-gradient(135deg, white 0%, ${column.color}05 100%)` 
                                       : 'white',
-                                    borderLeft: snapshot.isDragging ? `4px solid ${column.color}` : '4px solid transparent',
-                                    transform: `${provided.draggableProps.style?.transform || ''} ${
-                                      snapshot.isDragging ? 'rotate(2deg) scale(1.05)' : ''
+                                    borderLeft: dragSnapshot.isDragging ? `4px solid ${column.color}` : '4px solid transparent',
+                                    transform: `${dragProvided.draggableProps.style?.transform || ''} ${
+                                      dragSnapshot.isDragging ? 'rotate(2deg) scale(1.05)' : ''
                                     }`,
                                   }}
                                 >
@@ -568,8 +660,14 @@ export function PipelineBoard() {
                                     {/* Header de la tarjeta - Más compacto */}
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1 min-w-0">
-                                        <h4 className="pipeline-opportunity-title text-gray-900 truncate mb-1">
-                                          {opportunity.clientName}
+                                        <h4 className="pipeline-opportunity-title text-gray-900 truncate mb-1 flex items-center gap-1">
+                                          {/* Grip: solo este elemento actúa como handle para arrastrar la tarjeta */}
+                                          <span
+                                            {...dragProvided.dragHandleProps}
+                                            className="inline-block w-3 h-3 rounded bg-gray-200 mr-1 cursor-grab active:cursor-grabbing flex-shrink-0"
+                                            title="Arrastrar"
+                                          />
+                                          <span className="truncate">{opportunity.clientName}</span>
                                         </h4>
                                         <p className="pipeline-opportunity-service text-gray-600 line-clamp-1 sm:line-clamp-2 leading-relaxed">
                                           {opportunity.serviceName}
@@ -622,34 +720,53 @@ export function PipelineBoard() {
                                     <div className="flex items-center justify-between pt-1 sm:pt-1.5 border-t border-gray-100">
                                       <div className="pipeline-opportunity-actions flex items-center">
                                         <Button
+                                          type="button"
                                           size="sm"
                                           variant="ghost"
                                           className="pipeline-opportunity-action-button hover:bg-blue-50 transition-colors"
-                                          onClick={() => {
-                                            setCallDefaults({ phone: opportunity.phone })
-                                            setOpenCall(true)
+                                          onPointerDownCapture={(e)=>{ e.stopPropagation(); }}
+                                          onMouseDownCapture={(e)=>{ e.stopPropagation(); }}
+                                          onMouseDown={(e)=>{ e.stopPropagation(); }}
+                                          onPointerDown={(e)=>{ e.stopPropagation(); }}
+                                          onPointerUp={(e)=>{ e.stopPropagation(); }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                            openPhoneCall(opportunity.phone)
                                           }}
                                           title="Llamar"
                                         >
                                           <Phone className="pipeline-icon-xxs text-blue-600" />
                                         </Button>
+                                        {/* WhatsApp */}
                                         <Button
+                                          type="button"
                                           size="sm"
                                           variant="ghost"
                                           className="pipeline-opportunity-action-button hover:bg-green-50 transition-colors"
-                                          onClick={() => {
-                                            setEmailDefaults({ to: opportunity.email })
-                                            setOpenEmail(true)
-                                          }}
-                                          title="Enviar email"
+                                          onPointerDownCapture={(e)=>{ e.stopPropagation(); }}
+                                          onMouseDownCapture={(e)=>{ e.stopPropagation(); }}
+                                          onMouseDown={(e)=>{ e.stopPropagation(); }}
+                                          onPointerDown={(e)=>{ e.stopPropagation(); }}
+                                          onPointerUp={(e)=>{ e.stopPropagation(); }}
+                                          onClick={(e) => { e.stopPropagation(); e.preventDefault(); openWhatsApp(opportunity.phone, opportunity.clientName) }}
+                                          title="WhatsApp"
                                         >
-                                          <Mail className="pipeline-icon-xxs text-green-600" />
+                                          <MessageCircle className="pipeline-icon-xxs text-green-600" />
                                         </Button>
                                         <Button
+                                          type="button"
                                           size="sm"
                                           variant="ghost"
                                           className="pipeline-opportunity-action-button hover:bg-red-50 transition-colors"
-                                          onClick={async () => {
+                                          onPointerDownCapture={(e)=>e.stopPropagation()}
+                                          onMouseDownCapture={(e)=>e.stopPropagation()}
+                                          onMouseDown={(e)=>e.stopPropagation()}
+                                          onPointerDown={(e)=>e.stopPropagation()}
+                                          onPointerUp={(e)=>e.stopPropagation()}
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            e.preventDefault();
                                             const confirmed = window.confirm('¿Eliminar esta oportunidad? Esta acción no se puede deshacer.')
                                             if (!confirmed) return
                                             const numId = Number(opportunity.id)
@@ -690,7 +807,7 @@ export function PipelineBoard() {
                               )}
                             </Draggable>
                           ))}
-                          {provided.placeholder}
+                          {dropProvided.placeholder}
                           
                           {/* Estado vacío mejorado */}
                           {column.opportunities.length === 0 && (
