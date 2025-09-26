@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import '../styles/pipeline.css';
 
 :root {
   /* CRM Visual System — Minimal, elegant, professional */
@@ -37,6 +38,8 @@
   --sidebar-foreground: #FFFFFF;
   --sidebar-muted: #8A8A8A;
   --sidebar-active: #FCBA00;
+  /* Altura de cabecera/menús para calcular el alto visible del tablero */
+  --pipeline-offset: 140px;
 }
 
 /* Cuando el sidebar está colapsado, permite ver más columnas (reduce gap global) */
@@ -183,29 +186,29 @@ body {
 }
 .pipeline-column {
   flex: 0 0 auto; /* no crecer, no encoger */
-  min-width: clamp(220px, 40vw, 280px);
-  width: clamp(220px, 40vw, 300px);
+  min-width: 320px; /* ancho fijo uniforme */
+  width: 320px;     /* ancho fijo uniforme */
   scroll-snap-align: start;
 }
 
 /* Breakpoints */
 @media (min-width: 640px) {
   .pipeline-viewport { height: clamp(420px, 62vh, 840px); }
-  .pipeline-column { min-width: clamp(260px, 36vw, 320px); width: clamp(260px, 36vw, 340px); }
+  .pipeline-column { min-width: 320px; width: 320px; }
 }
 @media (min-width: 768px) {
   .pipeline-viewport { height: clamp(460px, 64vh, 860px); }
-  .pipeline-column { min-width: clamp(260px, 30vw, 320px); width: clamp(260px, 30vw, 340px); }
+  .pipeline-column { min-width: 320px; width: 320px; }
 }
 @media (min-width: 1024px) {
   .pipeline-viewport { height: clamp(480px, 66vh, 880px); }
-  /* Desktop: objetivo 5 columnas visibles */
-  .pipeline-column { min-width: 210px; width: 210px; }
+  /* Desktop */
+  .pipeline-column { min-width: 320px; width: 320px; }
 }
 
 @media (min-width: 1280px) {
   .pipeline-viewport { height: clamp(500px, 68vh, 900px); }
-  .pipeline-column { min-width: 210px; width: 220px; }
+  .pipeline-column { min-width: 320px; width: 320px; }
 }
 
 /* Compactar cabeceras de columna y badges sin depender de pipeline.css */

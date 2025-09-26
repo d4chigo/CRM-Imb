@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect } from "react"
+import { createPortal } from "react-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,13 +9,12 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
-import { Phone, MessageCircle, DollarSign, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target, BarChart3 } from "lucide-react"
+import { Phone, MessageCircle, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target } from "lucide-react"
 // Ahora el estado se obtiene del PipelineContext global
-import { calculateColumnTotal, canonicalStageOrder } from "@/hooks/use-pipeline-dnd"
 import { initialColumns } from "@/data/pipeline"
 import { usePipeline } from '@/contexts/PipelineContext'
 import { fetchStages, createStage, deleteStage, updateStage } from "@/lib/pipelineStages"
-import { formatCurrency } from "@/lib/currency"
+// import { formatCurrency } from "@/lib/currency" // Precio oculto por ahora
 import { EmailDialog } from "@/components/forms/EmailDialog"
 import { CallDialog } from "@/components/forms/CallDialog"
 import { useToast } from "@/hooks/use-toast"
@@ -33,6 +33,7 @@ export function PipelineBoard() {
   const scrollRef = React.useRef<HTMLDivElement | null>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
+  const [isDragging, setIsDragging] = React.useState(false)
   // Filtrado local (equivalente al hook anterior)
   const filteredColumns = React.useMemo(() => {
     if (!searchTerm) return columns
@@ -260,6 +261,49 @@ export function PipelineBoard() {
     }
   }, [checkScrollButtons, filteredColumns.length, getScrollStep])
 
+  // Auto-scroll horizontal cuando se arrastra una tarjeta y el puntero se acerca a los bordes
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !isDragging) return
+    const threshold = 140 // px desde el borde (más amplio para que sea más fácil activar)
+    const step = 36      // cantidad de scroll por frame (más rápido)
+    let rafId: number | null = null
+
+    const compute = (clientX: number) => {
+      const rect = el.getBoundingClientRect()
+      if (clientX > rect.right - threshold) {
+        // scroll hacia la derecha
+        if (rafId) cancelAnimationFrame(rafId)
+        rafId = requestAnimationFrame(() => {
+          el.scrollLeft += step
+          checkScrollButtons()
+        })
+      } else if (clientX < rect.left + threshold) {
+        // scroll hacia la izquierda
+        if (rafId) cancelAnimationFrame(rafId)
+        rafId = requestAnimationFrame(() => {
+          el.scrollLeft -= step
+          checkScrollButtons()
+        })
+      }
+    }
+    const onPointerMove = (e: PointerEvent) => compute(e.clientX)
+    const onMouseMove = (e: MouseEvent) => compute(e.clientX)
+    const onTouchMove = (e: TouchEvent) => {
+      const t = e.touches && e.touches[0]
+      if (t) compute(t.clientX)
+    }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('touchmove', onTouchMove as any)
+      if (rafId) cancelAnimationFrame(rafId)
+    }
+  }, [isDragging, checkScrollButtons])
+
   // Fallback robusto: si el estado global no tiene columnas, usar iniciales.
   // Para evitar que un filtro vacío o un error de búsqueda esconda las cabeceras,
   // preferimos renderizar las columnas base (sin filtro) cuando no hay resultados.
@@ -409,26 +453,6 @@ export function PipelineBoard() {
           <Target className="pipeline-icon-xs text-blue-700" />
           <span className="text-blue-700 font-medium">{columns.reduce((total: number, col: any) => total + col.opportunities.length, 0)}</span>
         </div>
-        <div className="pipeline-metric bg-green-50 border border-green-200 rounded flex items-center gap-0.5 sm:gap-1 min-w-0 flex-shrink-0">
-          <DollarSign className="pipeline-icon-xs text-green-700" />
-          <span className="text-green-700 font-medium">
-            {formatCurrency(columns.reduce((total: number, col: any) => total + calculateColumnTotal(col.opportunities), 0))
-              .replace('.00', '')
-              .replace('$', '')
-              .substring(0, 6)}k
-          </span>
-        </div>
-        <div className="pipeline-metric bg-purple-50 border border-purple-200 rounded flex items-center gap-0.5 sm:gap-1 min-w-0 flex-shrink-0">
-          <BarChart3 className="pipeline-icon-xs text-purple-700" />
-          <span className="text-purple-700 font-medium">
-            {formatCurrency(
-              columns.reduce((total: number, col: any) => total + col.opportunities.length, 0) > 0
-                ? columns.reduce((total: number, col: any) => total + calculateColumnTotal(col.opportunities), 0) / 
-                  columns.reduce((total: number, col: any) => total + col.opportunities.length, 0)
-                : 0
-            ).replace('.00', '').replace('$', '').substring(0, 4)}k
-          </span>
-        </div>
         <div className="pipeline-metric bg-orange-50 border border-orange-200 rounded flex items-center gap-0.5 sm:gap-1 min-w-0 flex-shrink-0">
           <TrendingUp className="pipeline-icon-xs text-orange-700" />
           <span className="text-orange-700 font-medium">
@@ -493,7 +517,8 @@ export function PipelineBoard() {
         </div>
       )}
 
-      <DragDropContext onDragEnd={async (result) => {
+      <DragDropContext onDragStart={() => setIsDragging(true)} onDragEnd={async (result) => {
+        setIsDragging(false)
         const { destination, source, draggableId } = result
         const from = source?.droppableId
         const to = destination?.droppableId
@@ -532,11 +557,26 @@ export function PipelineBoard() {
             catch(e:any){ toast({ title:'No se pudo guardar movimiento', description: e.message || 'Error persistiendo etapa', variant:'destructive' }) }
           }
         }
+        // Asegurar visibilidad en la UI: centrar columna destino y mostrar tarjeta movida
+        setTimeout(() => {
+          try {
+            const colEl = document.getElementById(`col-${to}`)
+            colEl?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+            const oppEl = document.getElementById(`opp-${draggableId}`)
+            if (oppEl) {
+              const list = oppEl.closest('.pipeline-opportunities-list') as HTMLElement | null
+              if (list) {
+                const offsetTop = (oppEl as HTMLElement).offsetTop
+                list.scrollTo({ top: Math.max(0, offsetTop - 24), behavior: 'smooth' })
+              }
+            }
+          } catch {}
+        }, 0)
       }}>
         {/* Viewport mejorado con mejor diseño responsive */}
         <div
           ref={scrollRef}
-          className="pipeline-viewport"
+          className={`pipeline-viewport ${isDragging ? 'is-dragging' : ''}`}
         >
           <div className="pipeline-columns">
             {toRender.length === 0 && (
@@ -552,8 +592,12 @@ export function PipelineBoard() {
               </div>
             )}
             {toRender.map((column: any) => (
-              <div key={column.id} className="pipeline-column">
-                <Card className="shadow-md border-0 hover:shadow-lg transition-all duration-300 bg-white/90 backdrop-blur-sm">
+              <div
+                key={column.id}
+                id={`col-${column.id}`}
+                className="pipeline-column w-[320px] min-w-[320px] max-w-[320px]"
+              >
+                <Card className="pipeline-stage-card shadow-md border-0 hover:shadow-lg transition-all duration-300 bg-white/90 backdrop-blur-sm">
                   <CardHeader 
                     className="pipeline-card-header rounded-t-lg relative overflow-hidden" 
                     style={{ 
@@ -591,33 +635,11 @@ export function PipelineBoard() {
                           {column.opportunities.length}
                         </Badge>
                       </div>
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                        <div className="pipeline-opportunity-value text-gray-800">
-                          <span className="text-green-600">{formatCurrency(calculateColumnTotal(column.opportunities))}</span>
-                        </div>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="pipeline-search-button font-medium hover:bg-white/60 transition-colors border border-white/20" 
-                          style={{ color: column.color }}
-                          onClick={async ()=>{
-                            const nombre = prompt(`Nombre del nuevo contacto / oportunidad para etapa ${column.title}`)
-                            if(!nombre) return
-                            try {
-                              const opp = await createOpportunity({ servicioId:1, etapaId: column.id, nombreCliente: nombre, valorUsd:0, probabilidad:0 })
-                              addOpportunity(column.id, { id: String(opp.id), clientName: opp.nombreCliente, serviceName: 'Servicio', agent: 'Sin asignar', value: opp.valorUsd || 0, probability: opp.probabilidad || 0, closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10), phone:'', email:'' })
-                            } catch(e:any){ toast({ title:'Error', description:e.message, variant:'destructive' }) }
-                          }}
-                        >
-                          <Plus className="pipeline-icon-xxs mr-0.5 sm:mr-1" />
-                          <span className="hidden sm:inline">Agregar</span>
-                          <span className="sm:hidden">+</span>
-                        </Button>
-                      </div>
+                      {/* Botón 'Agregar' eliminado a pedido del usuario */}
                     </div>
                   </CardHeader>
                   
-                  <CardContent className="pipeline-card-content pt-0 pb-1 sm:pb-2">
+                  <CardContent className="pipeline-card-content pt-0 pb-1 sm:pb-2 flex-1">
                     <Droppable droppableId={column.id}>
                       {(dropProvided, dropSnapshot) => (
                         <div
@@ -635,28 +657,31 @@ export function PipelineBoard() {
                         >
                           {column.opportunities.map((opportunity: any, index: number) => (
                             <Draggable key={opportunity.id} draggableId={opportunity.id} index={index}>
-                              {(dragProvided, dragSnapshot) => (
-                                <Card
-                                  ref={dragProvided.innerRef}
-                                  {...dragProvided.draggableProps}
-                                  {...dragProvided.dragHandleProps}
-                                  className={`cursor-grab active:cursor-grabbing transition-all duration-300 border-0 ${
-                                    dragSnapshot.isDragging
-                                      ? "shadow-2xl rotate-2 scale-105 z-50"
-                                      : "hover:shadow-md hover:-translate-y-1 shadow-sm"
-                                  }`}
-                                  style={{
-                                    ...dragProvided.draggableProps.style,
-                                    background: dragSnapshot.isDragging 
-                                      ? `linear-gradient(135deg, white 0%, ${column.color}05 100%)` 
-                                      : 'white',
-                                    borderLeft: dragSnapshot.isDragging ? `4px solid ${column.color}` : '4px solid transparent',
-                                    transform: `${dragProvided.draggableProps.style?.transform || ''} ${
-                                      dragSnapshot.isDragging ? 'rotate(2deg) scale(1.05)' : ''
-                                    }`,
-                                  }}
-                                >
-                                  <CardContent className="pipeline-opportunity-item space-y-1">
+                              {(dragProvided, dragSnapshot) => {
+                                const cardEl = (
+                                  <Card
+                                    id={`opp-${opportunity.id}`}
+                                    ref={dragProvided.innerRef}
+                                    {...dragProvided.draggableProps}
+                                    {...dragProvided.dragHandleProps}
+                                    className={`cursor-grab active:cursor-grabbing transition-all duration-300 border-0 ${
+                                      dragSnapshot.isDragging
+                                        ? "shadow-2xl rotate-2 scale-105 z-[9999] dragging-portal-card"
+                                        : "hover:shadow-md hover:-translate-y-1 shadow-sm"
+                                    }`}
+                                    style={{
+                                      ...dragProvided.draggableProps.style,
+                                      background: dragSnapshot.isDragging 
+                                        ? `linear-gradient(135deg, white 0%, ${column.color}05 100%)` 
+                                        : 'white',
+                                      borderLeft: dragSnapshot.isDragging ? `4px solid ${column.color}` : '4px solid transparent',
+                                      transform: `${dragProvided.draggableProps.style?.transform || ''} ${
+                                        dragSnapshot.isDragging ? 'rotate(2deg) scale(1.05)' : ''
+                                      }`,
+                                      pointerEvents: dragSnapshot.isDragging ? 'none' as any : undefined,
+                                    }}
+                                  >
+                                    <CardContent className="pipeline-opportunity-item space-y-1">
                                     {/* Header de la tarjeta - Más compacto */}
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1 min-w-0">
@@ -687,32 +712,15 @@ export function PipelineBoard() {
                                       </Badge>
                                     </div>
 
-                                    {/* Información financiera destacada - Más compacta */}
-                                    <div className="space-y-1">
-                                      <div 
-                                        className="flex items-center space-x-1 sm:space-x-2 pipeline-card-content rounded-lg"
-                                        style={{ backgroundColor: `${column.color}08` }}
-                                      >
-                                        <div 
-                                          className="p-0.5 sm:p-1 rounded-lg shadow-sm"
-                                          style={{ backgroundColor: column.color }}
-                                        >
-                                          <DollarSign className="pipeline-icon-xxs text-white" />
-                                        </div>
-                                        <span className="pipeline-opportunity-value text-gray-900 truncate">
-                                          {formatCurrency(opportunity.value)}
-                                        </span>
+                                    {/* Meta compacta (fecha y agente) */}
+                                    <div className="pipeline-opportunity-meta flex justify-between text-gray-600 mt-1">
+                                      <div className="flex items-center space-x-0.5 sm:space-x-1">
+                                        <Calendar className="pipeline-icon-xxs text-gray-400" />
+                                        <span className="truncate">{opportunity.closeDate}</span>
                                       </div>
-
-                                      <div className="pipeline-opportunity-meta flex justify-between text-gray-600">
-                                        <div className="flex items-center space-x-0.5 sm:space-x-1">
-                                          <Calendar className="pipeline-icon-xxs text-gray-400" />
-                                          <span className="truncate">{opportunity.closeDate}</span>
-                                        </div>
-                                        <div className="flex items-center space-x-0.5 sm:space-x-1">
-                                          <User className="pipeline-icon-xxs text-gray-400" />
-                                          <span className="truncate">{opportunity.agent}</span>
-                                        </div>
+                                      <div className="flex items-center space-x-0.5 sm:space-x-1">
+                                        <User className="pipeline-icon-xxs text-gray-400" />
+                                        <span className="truncate">{opportunity.agent}</span>
                                       </div>
                                     </div>
 
@@ -802,9 +810,14 @@ export function PipelineBoard() {
                                         </AvatarFallback>
                                       </Avatar>
                                     </div>
-                                  </CardContent>
-                                </Card>
-                              )}
+                                    </CardContent>
+                                  </Card>
+                                )
+                                // Si está en drag, renderizar en portal para evitar clipping por overflow/transform
+                                return dragSnapshot.isDragging && typeof window !== 'undefined'
+                                  ? createPortal(cardEl, document.body)
+                                  : cardEl
+                              }}
                             </Draggable>
                           ))}
                           {dropProvided.placeholder}

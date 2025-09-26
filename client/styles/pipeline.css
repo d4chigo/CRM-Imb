@@ -13,7 +13,8 @@
 .pipeline-container {
   width: 100%;
   max-width: 100vw;
-  height: auto;
+  /* El tablero ocupa el alto del viewport menos la cabecera/menús. */
+  height: calc(100vh - var(--pipeline-offset, 140px));
   box-sizing: border-box;
   overflow: hidden;
   container-type: inline-size;
@@ -26,23 +27,21 @@
 .pipeline-viewport {
   width: 100%;
   /* Rail visible y estable: scroll horizontal, sin scroll vertical interno */
-  height: auto;
-  flex: 1 1 0;
-  /* Asegurar alto suficiente para mostrar tarjetas aunque el contenedor padre limite el flujo */
-  min-height: 420px;
-  height: clamp(380px, 60vh, 820px);
+  height: 100%;
+  flex: 1 1 auto;
+  /* Permitir que el contenedor maneje todo el alto disponible del viewport asignado */
+  min-height: 360px;
   min-inline-size: 0;
   min-block-size: 0;
   overflow-x: auto;   /* mostrar barra horizontal si hace falta */
   overflow-y: hidden; /* evitar clipping vertical dentro del rail */
   scrollbar-gutter: stable;
-  padding-bottom: 8px;
   scrollbar-width: thin;
   scrollbar-color: #cbd5e1 #f1f5f9;
   box-sizing: border-box;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: clamp(4px, 1vw, 8px);
-  border: 1px solid #e2e8f0;
+  border: 3px solid #1f2937; /* borde más notorio y oscuro del tablero */
   scroll-snap-type: x proximity; /* navegación más suave en móvil */
 }
 
@@ -68,24 +67,26 @@
 /* Container de columnas con grid adaptativo */
 .pipeline-columns {
   display: flex;
-  gap: clamp(0.5rem, 1vw, 1rem);
-  padding: 0.5rem;
-  height: auto;              /* dejar que el contenido defina la altura */
+  gap: 8px;               /* columnas más juntas */
+  padding: 6px;           /* padding compacto del rail */
+  height: 100%;              /* que las columnas puedan estirarse al alto del viewport */
   min-width: max-content;    /* asegura que las columnas no colapsen */
   box-sizing: border-box;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 /* Columnas individuales con ancho adaptativo */
 .pipeline-column {
-  /* Compacto: columnas un poco más angostas para que quepan más en pantalla */
-  width: clamp(280px, 24vw, 340px);
-  min-width: 280px;
-  max-width: 340px;
+  /* Todas las columnas con el mismo ancho, sin importar contenido */
+  width: 320px;
+  min-width: 320px;
+  max-width: 320px;
   flex-shrink: 0;
-  height: auto;             /* dejar que el contenido defina la altura */
+  height: 100%;             /* llenar alto disponible para que la card interna pueda medir 100% */
+  display: flex;            /* permitir que la card crezca */
   box-sizing: border-box;
   scroll-snap-align: start; /* alineación de snap por columna */
+  padding: 2px;             /* espacio para remarcar el borde de la card interna */
 }
 
 /* Override para cards con h-full de Tailwind: evitar colapso de altura */
@@ -98,6 +99,46 @@
   width: 100%;
   margin-bottom: clamp(0.25rem, 0.5vw, 0.75rem);
   box-sizing: border-box;
+}
+
+/* Mantener cada etapa dentro de un cuadro con scroll interno */
+.pipeline-stage-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;                 /* ocupar todo el ancho de la columna */
+  min-height: 0; /* importante para permitir overflow en hijos */
+  border: 2px solid #1f2937 !important; /* borde fuerte y oscuro para cada etapa */
+  border-radius: 6px;           /* menos redondeado: más aspecto de "cuadro" */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 6px rgba(0,0,0,0.04);
+}
+
+.pipeline-stage-card .pipeline-card-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* que el listado maneje su propio scroll */
+  flex: 1 1 auto;   /* que el contenido ocupe todo el alto de la card */
+}
+
+.pipeline-stage-card .pipeline-opportunities-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;   /* ocupar todo el alto disponible */
+  max-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Durante el drag, permitir que el contenido sobresalga para que el item se vea */
+.pipeline-viewport.is-dragging .pipeline-stage-card .pipeline-card-content,
+.pipeline-viewport.is-dragging .pipeline-opportunities-list {
+  overflow: visible !important;
+}
+
+/* Visibilidad del item arrastrado (cuando le agregamos z-index alto desde inline style) */
+.dragging-portal-card {
+  outline: 2px dashed rgba(59, 130, 246, 0.35);
+  border-radius: 10px;
 }
 
 /* Responsive breakpoints para diferentes tamaños */
