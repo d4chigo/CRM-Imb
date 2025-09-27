@@ -77,7 +77,7 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-white border border-gray-200 text-gray-900 shadow-xl">
         <DialogHeader>
           <DialogTitle>Nueva Oportunidad</DialogTitle>
           <DialogDescription>Completa los datos para crear una nueva oportunidad.</DialogDescription>
@@ -105,11 +105,11 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
                   <FormLabel>Servicio</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-white border border-gray-300 text-gray-800">
                         <SelectValue placeholder="Selecciona un servicio" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
                       {/* TODO: Cargar servicios dinámicamente desde la BD */}
                       <SelectItem value="Compra de propiedades">Compra de propiedades</SelectItem>
                       <SelectItem value="Venta de propiedades">Venta de propiedades</SelectItem>
@@ -208,11 +208,11 @@ export function NewOpportunityDialog({ open, onOpenChange, columns, onSubmit }: 
                   <FormLabel>Etapa</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-white border border-gray-300 text-gray-800">
                         <SelectValue placeholder="Selecciona la etapa" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
                       {columns.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.title}

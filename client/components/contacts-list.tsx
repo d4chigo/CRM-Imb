@@ -14,7 +14,7 @@ import { EditContactDialog, EditContactFormValues } from '@/components/forms/Edi
 // Reemplazamos uso de hook local por contexto global del pipeline
 import { usePipeline } from '@/contexts/PipelineContext'
 import { fetchContacts, createContact, updateContact, deleteContact, ContactDTO, listDuplicateContacts, mergeContacts, bulkTagContacts, bulkMoveContactsToPipeline } from "@/lib/contacts"
-import { createOpportunityFromContact } from '@/lib/opportunities'
+import { createOpportunityFromContact, createOpportunity } from '@/lib/opportunities'
 import { useAuth } from '@/contexts/AuthContext'
 import { getGoogleContactsAuthUrl, openGoogleImportPopup, createGoogleContact, getGoogleSyncStatus, manualGoogleSync } from "@/lib/googleContacts"
 import { useToast } from '@/hooks/use-toast'
@@ -60,6 +60,17 @@ export function ContactsList() {
   const [dupGroups, setDupGroups] = useState<Array<{ by:string; value:string; count:number; members: ContactDTO[] }>>([])
   // Separar por tipo (Clientes vs No clientes)
   const [splitByType, setSplitByType] = useState(false)
+
+  // --- Cache local para etiquetas: asegura persistencia visual incluso si backend no devuelve el campo esperado ---
+  function readTagCache(): Record<string, { etiquetas?: string[]; etiqueta_otro?: string | null }> {
+    try {
+      const raw = localStorage.getItem('contactsTagCache')
+      return raw ? JSON.parse(raw) : {}
+    } catch { return {} }
+  }
+  function writeTagCache(cache: Record<string, { etiquetas?: string[]; etiqueta_otro?: string | null }>) {
+    try { localStorage.setItem('contactsTagCache', JSON.stringify(cache)) } catch {}
+  }
 
   // Calcular estilo seguro para el bubble dentro del viewport
   const bubbleStyle: React.CSSProperties | undefined = bubblePos ? {
@@ -120,9 +131,32 @@ export function ContactsList() {
     if (!selectedIds.size) return
     if (!bulkEtiqueta && !bulkEtiquetaOtro) { toast({ title:'Selecciona una etiqueta o especifica otra', variant:'destructive' }); return }
     try {
+      // 1) Intento por endpoint masivo
       await bulkTagContacts(Array.from(selectedIds), bulkEtiqueta || undefined as any, bulkEtiquetaOtro || undefined)
-      // Reflejar en estado local
-      setContacts(prev => prev.map(c => selectedIds.has(c.id!) ? { ...c, etiquetas: bulkEtiqueta ? [bulkEtiqueta] : [], etiqueta_otro: bulkEtiquetaOtro || null } : c))
+      // 2) Refuerzo: actualizar en backend contacto por contacto para asegurar persistencia
+      const labelsArray = bulkEtiqueta ? [bulkEtiqueta] : (bulkEtiquetaOtro ? [bulkEtiquetaOtro] : [])
+      for (const id of Array.from(selectedIds)) {
+        try {
+          await updateContact(id, {
+            etiquetas: labelsArray.length ? labelsArray : undefined,
+            etiqueta_otro: bulkEtiqueta ? undefined : (bulkEtiquetaOtro || null)
+          } as any)
+        } catch (_) { /* fallback silencioso */ }
+      }
+      // 3) Reflejar en estado local inmediato para la UX
+      setContacts(prev => prev.map(c => selectedIds.has(c.id!) ? {
+        ...c,
+        etiquetas: labelsArray.length ? labelsArray : [],
+        etiqueta_otro: bulkEtiqueta ? null : (bulkEtiquetaOtro || null)
+      } : c))
+      // 3b) Actualizar cache local para persistencia inmediata
+      const cache = readTagCache()
+      Array.from(selectedIds).forEach(id => {
+        cache[String(id)] = { etiquetas: labelsArray.length ? labelsArray : [], etiqueta_otro: bulkEtiqueta ? null : (bulkEtiquetaOtro || null) }
+      })
+      writeTagCache(cache)
+      // 4) Recargar desde servidor para validar persistencia real
+      await loadContacts({ page: 1, search: searchTerm, type: selectedType })
       // Feedback
       toast({ title: 'Etiquetas aplicadas', description: `${selectedIds.size} contacto(s)` })
       clearSelection()
@@ -139,7 +173,27 @@ export function ContactsList() {
       for (const id of ids) {
         const c = contacts.find(x => x.id === id)
         if (c) {
-          try { await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email }, 'contacto_inicial') } catch(_) {}
+          try {
+            // si el contacto tiene mes_interes, estimar fecha de cierre primer día de ese mes (año actual)
+            let fechaCierre: string | undefined
+            const m = (c as any).mes_interes ? Number((c as any).mes_interes) : 0
+            if (m >= 1 && m <= 12) {
+              const y = new Date().getFullYear()
+              const d = new Date(Date.UTC(y, m - 1, 1))
+              fechaCierre = d.toISOString().slice(0,10)
+            }
+            await createOpportunity({
+              contactoId: c.id,
+              servicioId: 1,
+              etapaId: 'contacto_inicial',
+              nombreCliente: c.nombre,
+              valorUsd: 0,
+              probabilidad: 0,
+              fechaCierre,
+              telefono: c.telefono || undefined,
+              email: (c.email && c.email.trim() !== '') ? c.email : undefined,
+            })
+          } catch(_) {}
         }
       }
       // Marcar como cliente en backend (y local)
@@ -198,7 +252,19 @@ export function ContactsList() {
     setError(null)
     try {
       const { data, meta } = await fetchContacts({ page: next?.page ?? page, pageSize, search: next?.search ?? searchTerm, type: next?.type ?? selectedType })
-      setContacts(data)
+      // Normalizar etiquetas para que persistan visualmente aunque el backend devuelva 'etiqueta' como string
+      const cache = readTagCache()
+      const normalized = (data || []).map((c:any) => {
+        const etiquetaStr = (c && (c.etiqueta ?? c.etiqueta_unica ?? c.tag)) as string | undefined
+        const etiquetasArr: string[] = (Array.isArray(c.etiquetas) && c.etiquetas.length)
+          ? c.etiquetas
+          : (etiquetaStr && etiquetaStr.trim() !== '' ? [etiquetaStr] : [])
+        // Mezclar con cache local si existe
+        const cached = cache[c.id]
+        const merged: string[] = cached?.etiquetas && cached.etiquetas.length ? cached.etiquetas : etiquetasArr
+        return { ...c, etiquetas: merged, etiqueta_otro: cached?.etiqueta_otro ?? c.etiqueta_otro }
+      }) as ContactDTO[]
+      setContacts(normalized)
       setTotal(meta?.total || data.length)
     } catch (e:any) {
       setError(e.message || 'Error cargando contactos')
@@ -718,8 +784,8 @@ export function ContactsList() {
       )}
       {/* Preview dialog */}
       <Dialog open={previewOpen} onOpenChange={(v)=>{ setPreviewOpen(v); if(!v) setPreviewContact(null) }}>
-        {/* Modal iOS-like */}
-        <DialogContent className="max-w-md sm:max-w-lg p-6 max-h-[82vh] overflow-y-auto rounded-3xl bg-white/80 backdrop-blur-xl border border-white/40 shadow-2xl">
+        {/* Modal sólido */}
+        <DialogContent className="max-w-md sm:max-w-lg p-6 max-h-[82vh] overflow-y-auto rounded-lg bg-white border border-gray-200 shadow-2xl text-gray-900">
           <DialogHeader>
             <DialogTitle className="text-lg">Contacto</DialogTitle>
           </DialogHeader>
@@ -747,7 +813,7 @@ export function ContactsList() {
       </Dialog>
       {/* Duplicados dialog */}
       <Dialog open={dupsOpen} onOpenChange={setDupsOpen}>
-        <DialogContent className="max-w-2xl p-4 max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl p-4 max-h-[80vh] overflow-y-auto bg-white border border-gray-200 shadow-xl text-gray-900">
           <DialogHeader>
             <DialogTitle>Duplicados detectados</DialogTitle>
           </DialogHeader>

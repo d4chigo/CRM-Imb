@@ -3,13 +3,14 @@
 import React, { useEffect } from "react"
 import { createPortal } from "react-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
-import { Phone, MessageCircle, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target } from "lucide-react"
+import { Phone, MessageCircle, Calendar, User, Search, Plus, Trash2, Settings2, ChevronLeft, ChevronRight, TrendingUp, Target, MapPin } from "lucide-react"
 // Ahora el estado se obtiene del PipelineContext global
 import { initialColumns } from "@/data/pipeline"
 import { usePipeline } from '@/contexts/PipelineContext'
@@ -34,11 +35,37 @@ export function PipelineBoard() {
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
   const [isDragging, setIsDragging] = React.useState(false)
+  const [filterMonth, setFilterMonth] = React.useState<number>(0) // 0 = Todos
   // Filtrado local (equivalente al hook anterior)
   const filteredColumns = React.useMemo(() => {
-    if (!searchTerm) return columns
-    return columns.map((c:any) => ({ ...c, opportunities: c.opportunities.filter((o:any) => o.clientName.toLowerCase().includes(searchTerm.toLowerCase()) || o.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) || o.agent.toLowerCase().includes(searchTerm.toLowerCase())) }))
-  }, [columns, searchTerm])
+    const term = (searchTerm || '').toLowerCase()
+    const month = filterMonth
+    const byText = (o:any) => !term || (
+      (o.clientName || '').toLowerCase().includes(term) ||
+      (o.serviceName || '').toLowerCase().includes(term) ||
+      (o.agent || '').toLowerCase().includes(term)
+    )
+    const getMonthFromDate = (d?: string) => {
+      if (!d) return 0
+      try {
+        // admitir formatos ISO o YYYY-MM-DD
+        const m = new Date(d).getMonth() + 1
+        return Number.isNaN(m) ? 0 : m
+      } catch { return 0 }
+    }
+    const byMonth = (o:any) => {
+      if (!month || month === 0) return true
+      // prioridad: o.mes_interes si existe, si no, mes de closeDate/fechaCierre
+      const m1 = Number(o.mes_interes || 0)
+      if (m1 >= 1 && m1 <= 12) return m1 === month
+      const m2 = getMonthFromDate(o.closeDate || o.fechaCierre)
+      return m2 === month
+    }
+    return columns.map((c:any) => ({
+      ...c,
+      opportunities: (c.opportunities || []).filter((o:any) => byText(o) && byMonth(o))
+    }))
+  }, [columns, searchTerm, filterMonth])
   const { toast } = useToast()
   // Abrir WhatsApp con el número de la oportunidad (helper dentro del componente)
   const openWhatsApp = (rawPhone?: string, name?: string) => {
@@ -464,8 +491,8 @@ export function PipelineBoard() {
         </div>
       </div>
 
-      {/* Barra de búsqueda ultra compacta */}
-      <div className="pipeline-search flex items-center">
+      {/* Barra de búsqueda + filtro por mes */}
+      <div className="pipeline-search flex items-center gap-2">
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-1.5 sm:left-2 top-1/2 transform -translate-y-1/2 pipeline-icon-xs text-gray-400" />
           <Input 
@@ -474,6 +501,28 @@ export function PipelineBoard() {
             onChange={(e) => setSearchTerm(e.target.value)} 
             className="pipeline-search-input border-gray-300 min-w-0" 
           />
+        </div>
+        <div className="min-w-[160px]">
+          <Select value={String(filterMonth)} onValueChange={(v)=> setFilterMonth(Number(v))}>
+            <SelectTrigger className="h-9 w-[160px] text-xs bg-white border border-gray-300 text-gray-800 shadow-sm">
+              <SelectValue placeholder="Mes: Todos" />
+            </SelectTrigger>
+            <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-xl">
+              <SelectItem value="0">Mes: Todos</SelectItem>
+              <SelectItem value="1">Enero</SelectItem>
+              <SelectItem value="2">Febrero</SelectItem>
+              <SelectItem value="3">Marzo</SelectItem>
+              <SelectItem value="4">Abril</SelectItem>
+              <SelectItem value="5">Mayo</SelectItem>
+              <SelectItem value="6">Junio</SelectItem>
+              <SelectItem value="7">Julio</SelectItem>
+              <SelectItem value="8">Agosto</SelectItem>
+              <SelectItem value="9">Septiembre</SelectItem>
+              <SelectItem value="10">Octubre</SelectItem>
+              <SelectItem value="11">Noviembre</SelectItem>
+              <SelectItem value="12">Diciembre</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <Button
@@ -686,7 +735,6 @@ export function PipelineBoard() {
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1 min-w-0">
                                         <h4 className="pipeline-opportunity-title text-gray-900 truncate mb-1 flex items-center gap-1">
-                                          {/* Grip: solo este elemento actúa como handle para arrastrar la tarjeta */}
                                           <span
                                             {...dragProvided.dragHandleProps}
                                             className="inline-block w-3 h-3 rounded bg-gray-200 mr-1 cursor-grab active:cursor-grabbing flex-shrink-0"
@@ -694,12 +742,17 @@ export function PipelineBoard() {
                                           />
                                           <span className="truncate">{opportunity.clientName}</span>
                                         </h4>
+                                        {opportunity.city && (
+                                          <div className="flex items-center text-[11px] text-gray-500 -mt-1 mb-1">
+                                            <MapPin className="h-3 w-3 mr-1 text-gray-400" />
+                                            <span className="truncate">{opportunity.city}</span>
+                                          </div>
+                                        )}
                                         <p className="pipeline-opportunity-service text-gray-600 line-clamp-1 sm:line-clamp-2 leading-relaxed">
                                           {opportunity.serviceName}
                                         </p>
                                       </div>
                                       <Badge
-                                        variant="outline"
                                         className="pipeline-card-badge font-bold ml-2 flex-shrink-0"
                                         style={{
                                           borderColor: column.color,

@@ -43,6 +43,8 @@ export interface ContactDTO {
   fecha_nacimiento?: string | Date | null; 
   etiquetas?: string[]; 
   etiqueta_otro?: string | null;
+  mes_interes?: number | null; // 1-12 (mes estimado de interés/cierre)
+  ciudad?: string | null;      // alias de departamento si prefieres trabajar con ciudad
   creado_en?: string; 
 }
 

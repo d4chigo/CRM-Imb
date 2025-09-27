@@ -51,7 +51,7 @@ export function CallDialog({ open, onOpenChange, defaults, onSubmit }: CallDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-white border border-gray-200 text-gray-900 shadow-xl">
         <DialogHeader>
           <DialogTitle>Registrar Llamada</DialogTitle>
           <DialogDescription>Guarda el resultado de la llamada y notas relevantes.</DialogDescription>

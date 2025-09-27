@@ -51,7 +51,7 @@ export function EmailDialog({ open, onOpenChange, defaults, onSubmit }: EmailDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-white border border-gray-200 text-gray-900 shadow-xl">
         <DialogHeader>
           <DialogTitle>Enviar Email</DialogTitle>
           <DialogDescription>Redacta y envía un correo al contacto.</DialogDescription>

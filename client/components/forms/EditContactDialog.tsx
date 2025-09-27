@@ -87,7 +87,7 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-xl p-6 max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-lg sm:max-w-xl p-6 max-h-[85vh] overflow-y-auto bg-white border border-gray-200 text-gray-900 shadow-xl">
         <DialogHeader>
           <DialogTitle className="text-lg">Editar Contacto</DialogTitle>
         </DialogHeader>
