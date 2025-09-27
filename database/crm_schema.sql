@@ -78,6 +78,51 @@ CREATE TABLE IF NOT EXISTS `cotizacion` (
   UNIQUE KEY `uniq_servicios_nombre` (`nombre`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Cotización por cliente (única por contacto)
+-- Guarda el resultado de la simulación (resumen + tabla en JSON) para cada contacto
+CREATE TABLE IF NOT EXISTS `cotizacion_cliente` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `contacto_id` INT UNSIGNED NOT NULL,
+  `cliente_nombre` VARCHAR(120) NOT NULL,
+  -- Parámetros base utilizados
+  `moneda` VARCHAR(8) NOT NULL DEFAULT 'PEN',
+  `tea` DECIMAL(7,4) NOT NULL DEFAULT 18.0000,   -- Tasa Efectiva Anual %
+  `tem` DECIMAL(9,6) NULL,                       -- Tasa Efectiva Mensual % (derivada)
+  `s_desgravamen_pct` DECIMAL(7,4) NOT NULL DEFAULT 0.0000,
+  `itf_pct` DECIMAL(9,6) NOT NULL DEFAULT 0.000050, -- 0.005%
+
+  -- Entradas mínimas
+  `monto` DECIMAL(14,2) NOT NULL,               -- principal
+  `plazo_meses` INT NOT NULL,                   -- n
+
+  -- Resultados/resumen
+  `cuota_mensual` DECIMAL(14,2) NOT NULL,
+  `total_interes` DECIMAL(14,2) NOT NULL,
+  `total_pagar` DECIMAL(14,2) NOT NULL,
+
+  -- Tabla de amortización serializada (JSON)
+  `amortizacion_json` JSON NOT NULL,
+
+  `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `actualizado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_cotizacion_contacto` (`contacto_id`),
+  INDEX `idx_cot_cli_nombre` (`cliente_nombre`),
+  CONSTRAINT `fk_cot_cli_contacto` FOREIGN KEY (`contacto_id`) REFERENCES `contacto`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Historial opcional de cotizaciones por cliente (si deseas guardar versiones)
+CREATE TABLE IF NOT EXISTS `cotizacion_cliente_historial` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `cotizacion_cliente_id` INT UNSIGNED NOT NULL,
+  `snapshot_json` JSON NOT NULL,
+  `creado_en` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  INDEX `idx_cot_cli_hist_cot` (`cotizacion_cliente_id`),
+  CONSTRAINT `fk_cot_cli_hist_cot` FOREIGN KEY (`cotizacion_cliente_id`) REFERENCES `cotizacion_cliente`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Etapas/columnas del pipeline (identificador estable usado por la app)
 CREATE TABLE IF NOT EXISTS `etapas_pipeline` (
   `id` VARCHAR(64) NOT NULL,          -- Ej.: 'contacto_inicial'

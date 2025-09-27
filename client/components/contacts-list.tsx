@@ -493,9 +493,14 @@ export function ContactsList() {
       <Card key={c.id} className="border border-gray-200 group">
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold gap-2 flex flex-col sm:flex-row sm:items-center sm:justify-between sm:space-y-0 space-y-2">
-            <span className="min-w-0 flex items-center gap-2 sm:flex-1" title={c.nombre}>
+            <span className="min-w-0 flex items-center gap-2 sm:flex-1">
               <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
-              <button type="button" className="text-left hover:underline truncate max-w-full" onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}>
+              <button
+                type="button"
+                title={c.nombre}
+                className="text-left hover:underline truncate max-w-full text-sm"
+                onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}
+              >
                 {c.nombre}
               </button>
             </span>
@@ -524,6 +529,19 @@ export function ContactsList() {
                   window.open(url, '_blank')
                 }}>
                   <CalendarIcon className="h-4 w-4" />
+                </Button>
+                {/* Simular cotización */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Simular cotización"
+                  onClick={() => {
+                    const url = `/cotizaciones/simulador?contactoId=${c.id}&nombre=${encodeURIComponent(c.nombre)}`
+                    window.open(url, '_blank')
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
                 </Button>
                 {/* Crear oportunidad en pipeline (persistente en backend) */}
                 <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {

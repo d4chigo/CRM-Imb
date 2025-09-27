@@ -22,6 +22,7 @@ const opportunitiesRoutes = require('./routes/opportunities');
 const googleRoutes = require('./routes/google');
 const statsRoutes = require('./routes/stats');
 const cotizacionesRoutes = require('./routes/cotizaciones');
+const quotesRoutes = require('./routes/quotes');
 
 const app = express();
 
@@ -66,13 +67,14 @@ app.use(cookieParser());
 
 // Rutas de autenticación
 app.use('/api/auth', authRoutes);
-// Rutas de pipeline
+// Rutas de pipeline y demás
 app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api/opportunities', opportunitiesRoutes);
 app.use('/api/google', googleRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/cotizaciones', cotizacionesRoutes);
+app.use('/api/quotes', quotesRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {
