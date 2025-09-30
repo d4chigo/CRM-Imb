@@ -47,74 +47,6 @@ function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0,
     cuotaBaseAnualidad = principal * factor
   }
 
-  function buildTableHtml() {
-    if (!results) return ''
-    const headers = ['#','Saldo Inicial','Interés','Amortización','S. Desgravamen','Otros Cargos','ITF','Cuota Total','Saldo Final']
-    const rows = results.schedule.map(r => `
-      <tr>
-        <td>${r.period}</td>
-        <td>${r.debtStart.toFixed(2)}</td>
-        <td>${r.interest.toFixed(2)}</td>
-        <td>${r.amortization.toFixed(2)}</td>
-        <td>${(r.desgravamen||0).toFixed(2)}</td>
-        <td>${(r.otrosCargos||0).toFixed(2)}</td>
-        <td>${(r.itf||0).toFixed(2)}</td>
-        <td>${r.monthlyPayment.toFixed(2)}</td>
-        <td>${r.debtEnd.toFixed(2)}</td>
-      </tr>`).join('')
-    return `
-      <table border="1" cellspacing="0" cellpadding="4">
-        <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`
-  }
-
-  function downloadExcel() {
-    if (!results) return
-    const summary = `
-      <table>
-        <tr><td>Cliente</td><td>${clientName}</td></tr>
-        <tr><td>Telefono</td><td>${phone||''}</td></tr>
-        <tr><td>Moneda</td><td>${currency}</td><td>Monto</td><td>${amount}</td></tr>
-        <tr><td>Plazo (meses)</td><td>${months}</td><td>TEA (%)</td><td>${tea}</td></tr>
-        <tr><td>Cuota aprox</td><td>${results.totals.monthlyPayment.toFixed(2)}</td><td>Total a Pagar</td><td>${results.totals.totalToPay.toFixed(2)}</td></tr>
-      </table>
-      <br/>
-    `
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${summary}${buildTableHtml()}</body></html>`
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    const name = (clientName || 'cotizacion').replace(/[^a-zA-Z0-9_-]+/g,'_')
-    a.href = url
-    a.download = `${name}_plantilla.xls`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  function printPDF() {
-    if (!results) return
-    const summary = `
-      <div style="font-family:Arial, sans-serif;">
-        <h2 style="margin:0 0 8px 0;">Plantilla de Amortización</h2>
-        <div><strong>Cliente:</strong> ${clientName}</div>
-        <div><strong>Teléfono:</strong> ${phone||''}</div>
-        <div><strong>Monto:</strong> ${amount} ${currency} · <strong>Plazo:</strong> ${months} · <strong>TEA:</strong> ${tea}%</div>
-        <div><strong>Cuota aprox:</strong> ${results.totals.monthlyPayment.toFixed(2)} · <strong>Total a Pagar:</strong> ${results.totals.totalToPay.toFixed(2)}</div>
-        <hr/>
-      </div>
-    `
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Plantilla</title>
-      <style>body{font-family:Arial, sans-serif; padding:16px} table{width:100%; border-collapse:collapse} th,td{border:1px solid #ccc; padding:4px; font-size:12px} th{background:#f2f2f2;}</style>
-    </head><body>${summary}${buildTableHtml()}<script>window.onload=()=>{window.print(); setTimeout(()=>window.close(),300);}</script></body></html>`
-    const w = window.open('', '_blank')
-    if (!w) return
-    w.document.open()
-    w.document.write(html)
-    w.document.close()
-  }
   let remaining = principal
   let totalInterest = 0
   let totalDesgravamen = 0
@@ -323,6 +255,75 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  function buildTableHtml() {
+    if (!results) return ''
+    const headers = ['#','Saldo Inicial','Interés','Amortización','S. Desgravamen','Otros Cargos','ITF','Cuota Total','Saldo Final']
+    const rows = results.schedule.map(r => `
+      <tr>
+        <td>${r.period}</td>
+        <td>${r.debtStart.toFixed(2)}</td>
+        <td>${r.interest.toFixed(2)}</td>
+        <td>${r.amortization.toFixed(2)}</td>
+        <td>${(r.desgravamen||0).toFixed(2)}</td>
+        <td>${(r.otrosCargos||0).toFixed(2)}</td>
+        <td>${(r.itf||0).toFixed(2)}</td>
+        <td>${r.monthlyPayment.toFixed(2)}</td>
+        <td>${r.debtEnd.toFixed(2)}</td>
+      </tr>`).join('')
+    return `
+      <table border="1" cellspacing="0" cellpadding="4">
+        <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`
+  }
+
+  function downloadExcel() {
+    if (!results) return
+    const summary = `
+      <table>
+        <tr><td>Cliente</td><td>${clientName}</td></tr>
+        <tr><td>Telefono</td><td>${phone||''}</td></tr>
+        <tr><td>Moneda</td><td>${currency}</td><td>Monto</td><td>${amount}</td></tr>
+        <tr><td>Plazo (meses)</td><td>${months}</td><td>TEA (%)</td><td>${tea}</td></tr>
+        <tr><td>Cuota aprox</td><td>${results.totals.monthlyPayment.toFixed(2)}</td><td>Total a Pagar</td><td>${results.totals.totalToPay.toFixed(2)}</td></tr>
+      </table>
+      <br/>
+    `
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${summary}${buildTableHtml()}</body></html>`
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const name = (clientName || 'cotizacion').replace(/[^a-zA-Z0-9_-]+/g,'_')
+    a.href = url
+    a.download = `${name}_plantilla.xls`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  function printPDF() {
+    if (!results) return
+    const summary = `
+      <div style="font-family:Arial, sans-serif;">
+        <h2 style="margin:0 0 8px 0;">Plantilla de Amortización</h2>
+        <div><strong>Cliente:</strong> ${clientName}</div>
+        <div><strong>Teléfono:</strong> ${phone||''}</div>
+        <div><strong>Monto:</strong> ${amount} ${currency} · <strong>Plazo:</strong> ${months} · <strong>TEA:</strong> ${tea}%</div>
+        <div><strong>Cuota aprox:</strong> ${results.totals.monthlyPayment.toFixed(2)} · <strong>Total a Pagar:</strong> ${results.totals.totalToPay.toFixed(2)}</div>
+        <hr/>
+      </div>
+    `
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Plantilla</title>
+      <style>body{font-family:Arial, sans-serif; padding:16px} table{width:100%; border-collapse:collapse} th,td{border:1px solid #ccc; padding:4px; font-size:12px} th{background:#f2f2f2;}</style>
+    </head><body>${summary}${buildTableHtml()}<script>window.onload=()=>{window.print(); setTimeout(()=>window.close(),300);}</script></body></html>`
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.open()
+    w.document.write(html)
+    w.document.close()
   }
 
   async function onSendToPipeline() {
