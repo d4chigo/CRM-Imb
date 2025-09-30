@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge, RefreshCw, CheckCircle2, AlertTriangle, Users } from "lucide-react"
+import { QuoteSimulator } from '@/components/quotes/QuoteSimulator'
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 // Nuevo dialog para edición
 import { EditContactDialog, EditContactFormValues } from '@/components/forms/EditContactDialog'
@@ -48,6 +49,8 @@ export function ContactsList() {
   const [bubblePos, setBubblePos] = useState<{ top:number; left:number } | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewContact, setPreviewContact] = useState<ContactDTO | null>(null)
+  const [simulateOpen, setSimulateOpen] = useState(false)
+  const [simulateContact, setSimulateContact] = useState<ContactDTO | null>(null)
   const [selectAllMode, setSelectAllMode] = useState<boolean>(false)
   // Refs para manejo robusto del popup y watchers
   const popupRef = useRef<Window | null>(null)
@@ -536,10 +539,7 @@ export function ContactsList() {
                   size="icon"
                   className="h-7 w-7"
                   title="Simular cotización"
-                  onClick={() => {
-                    const url = `/cotizaciones/simulador?contactoId=${c.id}&nombre=${encodeURIComponent(c.nombre)}`
-                    window.open(url, '_blank')
-                  }}
+                  onClick={() => { setSimulateContact(c); setSimulateOpen(true) }}
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
@@ -605,6 +605,19 @@ export function ContactsList() {
 
   return (
     <div className="space-y-6" style={{ paddingBottom: showBottomBar ? 110 : undefined }}>
+      {/* Simulador en modal */}
+      <Dialog open={simulateOpen} onOpenChange={(o)=> { setSimulateOpen(o); if (!o) setSimulateContact(null) }}>
+        <DialogContent className="max-w-5xl w-[95vw] p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle>Simulador de Cotización</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 pb-6">
+            {simulateContact && (
+              <QuoteSimulator contactoId={simulateContact.id!} clienteNombre={simulateContact.nombre} />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex items-center justify-end">
         <div className="flex gap-2 items-center">
           {/* Indicador de conexión Google */}

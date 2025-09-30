@@ -7,7 +7,7 @@ import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsList } from "@/components/contacts-list"
 import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
-import { QuoteSimulator } from "@/components/quotes/QuoteSimulator"
+import { QuotesHistory } from "@/components/quotes/QuotesHistory"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
 import { AppShell } from "@/components/layout/AppShell"
@@ -76,7 +76,7 @@ function DashboardInner() {
           </TabsContent>
 
           <TabsContent value="properties" className="space-y-6">
-            <QuoteSimulator />
+            <QuotesHistory />
           </TabsContent>
 
           <TabsContent value="activities" className="space-y-6">

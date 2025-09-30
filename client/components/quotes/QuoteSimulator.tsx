@@ -33,18 +33,46 @@ function formatCurrencyPEN(n: number) {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 }
 
-function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0, itfRate = 0.00005 }: { principal: number; periods: number; teaPct: number; sDesgravamenPct?: number; itfRate?: number; }) {
+type PaymentMode = 'anualidad' | 'fija' | 'flexible'
+
+function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0, itfRate = 0.00005, mode = 'anualidad', targetPayment = 500 }: { principal: number; periods: number; teaPct: number; sDesgravamenPct?: number; itfRate?: number; mode?: PaymentMode; targetPayment?: number; }) {
   const TEM = calcTEM(teaPct)
-  const factor = TEM / (1 - Math.pow(1 + TEM, -periods))
-  const cuotaBase = principal * factor
+  let cuotaBaseAnualidad = 0
+  if (TEM === 0) {
+    // Sin interés: amortización uniforme
+    cuotaBaseAnualidad = principal / periods
+  } else {
+    const factor = TEM / (1 - Math.pow(1 + TEM, -periods))
+    cuotaBaseAnualidad = principal * factor
+  }
   let remaining = principal
   let totalInterest = 0
   let totalDesgravamen = 0
   const schedule: Row[] = []
   for (let i=1;i<=periods;i++) {
-    const interest = remaining * TEM
+    const interest = TEM === 0 ? 0 : remaining * TEM
     const desgravamen = remaining * (sDesgravamenPct/100)
-    const amortization = cuotaBase - interest
+    let cuotaBase = cuotaBaseAnualidad
+    if (mode === 'fija') {
+      // Cuota fija objetivo para los primeros (periods-1), el último liquida todo
+      if (i < periods) {
+        // Asegurar al menos cubrir intereses
+        const minPayment = Math.max(targetPayment, interest + 1)
+        cuotaBase = Math.min(minPayment, remaining + interest) // no sobrepagar más que liquidar
+      } else {
+        cuotaBase = remaining + interest // liquidación final
+      }
+    } else if (mode === 'flexible') {
+      if (i < periods) {
+        const mult = 0.7 + Math.random() * 0.6 // 0.7x a 1.3x
+        const proposed = targetPayment * mult
+        const minPayment = Math.max(proposed, interest + 1)
+        cuotaBase = Math.min(minPayment, remaining + interest)
+      } else {
+        cuotaBase = remaining + interest
+      }
+    }
+    const amortization = Math.max(0, cuotaBase - interest)
     const totalBeforeITF = cuotaBase + desgravamen + 0 /*otrosCargos*/
     const itf = totalBeforeITF * itfRate
     const monthlyPayment = totalBeforeITF + itf
@@ -76,6 +104,8 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
   const [months, setMonths] = React.useState<string>("24")
   const [tea, setTea] = React.useState<string>("18")
   const [currency, setCurrency] = React.useState<'PEN'|'USD'>("PEN")
+  const [paymentMode, setPaymentMode] = React.useState<PaymentMode>('anualidad')
+  const [targetPayment, setTargetPayment] = React.useState<string>('500')
   const [loading, setLoading] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [results, setResults] = React.useState<{ schedule: Row[]; totals: { monthlyPayment: number; totalInterest: number; totalDesgravamen: number; totalITF: number; totalToPay: number } } | null>(null)
@@ -145,9 +175,16 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
     const p = Number(amount||0)
     const n = Number(months||0)
     const t = Number(tea||0)
+    const tp = Number(targetPayment||500)
     if (!clientName.trim()) { toast({ title:'Falta cliente', variant:'destructive' }); return }
     if (!(p>0) || !(n>0)) { toast({ title:'Monto/plazo inválidos', variant:'destructive' }); return }
-    const data = generateAmortization({ principal: p, periods: n, teaPct: t })
+    if (paymentMode !== 'anualidad') {
+      const firstInterest = p * calcTEM(t)
+      if (tp <= firstInterest) {
+        toast({ title:'Cuota objetivo muy baja', description:'La cuota debe cubrir al menos los intereses del primer periodo.', variant:'destructive' })
+      }
+    }
+    const data = generateAmortization({ principal: p, periods: n, teaPct: t, mode: paymentMode, targetPayment: tp })
     setResults(data)
   }
 
@@ -302,6 +339,26 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                 <Input type="number" min="0" max="100" step="0.01" value={tea} onChange={(e)=> setTea(e.target.value)} />
                 <div className="text-[11px] text-gray-500">TEM aprox: {(TEM*100).toFixed(4)}%</div>
               </div>
+              <div>
+                <label className="text-xs text-gray-600">Tipo de Cuota</label>
+                <Select value={paymentMode} onValueChange={(v)=> setPaymentMode(v as PaymentMode)}>
+                  <SelectTrigger className="w-full bg-white border border-gray-300 text-gray-800">
+                    <SelectValue placeholder="Anualidad" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
+                    <SelectItem value="anualidad">Anualidad (Francesa)</SelectItem>
+                    <SelectItem value="fija">Cuota fija objetivo</SelectItem>
+                    <SelectItem value="flexible">Cuota flexible</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(paymentMode === 'fija' || paymentMode === 'flexible') && (
+                <div>
+                  <label className="text-xs text-gray-600">Cuota objetivo (PEN)</label>
+                  <Input type="number" min="1" step="1" value={targetPayment} onChange={(e)=> setTargetPayment(e.target.value)} />
+                  <div className="text-[11px] text-gray-500">Por defecto 500. En el último mes se liquida el saldo.</div>
+                </div>
+              )}
               <div className="pt-2 flex gap-2">
                 <Button type="submit" variant="brand">Generar plantilla</Button>
                 <Button type="button" variant="outline" disabled={loading} onClick={onSave}>Guardar</Button>
