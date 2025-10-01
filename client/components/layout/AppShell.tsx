@@ -14,6 +14,7 @@ import { useDashboardTabs } from "@/contexts/DashboardTabsContext"
 const NavIcon: Record<string, React.ReactNode> = {
   pipeline: <LayoutGrid className="size-4" />,
   contacts: <Users className="size-4" />,
+  clients: <Users className="size-4" />,
   properties: <FileText className="size-4" />,
   activities: <CalendarDays className="size-4" />,
   statistics: <BarChart3 className="size-4" />,
@@ -33,6 +34,7 @@ export function AppShell({
   const nav = [
     { key: "pipeline", label: "Pipeline" },
     { key: "contacts", label: "Contactos" },
+    { key: "clients", label: "Clientes" },
     { key: "properties", label: "Cotizaciones" },
     { key: "activities", label: "Actividades" },
     { key: "statistics", label: "Estadísticas" },
