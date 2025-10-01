@@ -24,9 +24,11 @@ import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
 // Estado interno para contactos reales
 // Se cargan desde la API al montar el componente
 
-export function ContactsList() {
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+
+export function ContactsList({ onlyClients = false }: { onlyClients?: boolean }) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedType, setSelectedType] = useState("all")
+  const [selectedType, setSelectedType] = useState(onlyClients ? "cliente" : "all")
   const [openNew, setOpenNew] = useState(false)
   const [contacts, setContacts] = useState<ContactDTO[]>([])
   const [page, setPage] = useState(1)
@@ -257,7 +259,7 @@ export function ContactsList() {
       const { data, meta } = await fetchContacts({ page: next?.page ?? page, pageSize, search: next?.search ?? searchTerm, type: next?.type ?? selectedType })
       // Normalizar etiquetas para que persistan visualmente aunque el backend devuelva 'etiqueta' como string
       const cache = readTagCache()
-      const normalized = (data || []).map((c:any) => {
+      let normalized = (data || []).map((c:any) => {
         const etiquetaStr = (c && (c.etiqueta ?? c.etiqueta_unica ?? c.tag)) as string | undefined
         const etiquetasArr: string[] = (Array.isArray(c.etiquetas) && c.etiquetas.length)
           ? c.etiquetas
@@ -267,6 +269,9 @@ export function ContactsList() {
         const merged: string[] = cached?.etiquetas && cached.etiquetas.length ? cached.etiquetas : etiquetasArr
         return { ...c, etiquetas: merged, etiqueta_otro: cached?.etiqueta_otro ?? c.etiqueta_otro }
       }) as ContactDTO[]
+      if (onlyClients) {
+        normalized = normalized.filter(c => (c.tipo || '').toLowerCase() === 'cliente' || (c.etiquetas || []).some(e=> e.toLowerCase() === 'cliente'))
+      }
       setContacts(normalized)
       setTotal(meta?.total || data.length)
     } catch (e:any) {

@@ -43,6 +43,7 @@ function DashboardInner() {
   const sectionTitle = {
     pipeline: 'Pipeline de Ventas',
     contacts: 'Contactos',
+    clients: 'Clientes',
     properties: 'Cotizaciones',
     activities: 'Actividades',
     statistics: 'Estadísticas'
@@ -51,6 +52,7 @@ function DashboardInner() {
   const sectionSubtitle = {
     pipeline: 'Arrastra las oportunidades entre las etapas.',
     contacts: 'Gestiona y segmenta tus contactos.',
+    clients: 'Contactos etiquetados como clientes. Desde aquí puedes simular, exportar, guardar y enviar al pipeline.',
     properties: 'Administra tus cotizaciones y servicios.',
     activities: 'Controla tareas y seguimientos.',
     statistics: 'Analiza el rendimiento de tu CRM.',
@@ -73,6 +75,10 @@ function DashboardInner() {
 
           <TabsContent value="contacts" className="space-y-6">
             <ContactsList />
+          </TabsContent>
+
+          <TabsContent value="clients" className="space-y-6">
+            <ContactsList onlyClients />
           </TabsContent>
 
           <TabsContent value="properties" className="space-y-6">
