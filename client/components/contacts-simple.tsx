@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Pencil, Trash2, CheckCircle2, PlusCircle, Tag as TagIcon } from "lucide-react"
-import { fetchContacts, updateContact, deleteContact, ContactDTO, bulkTagContacts } from "@/lib/contacts"
+import { fetchContacts, updateContact, deleteContact, ContactDTO, createContact } from "@/lib/contacts"
 import { useToast } from "@/hooks/use-toast"
 import { QuoteSimulator } from "@/components/quotes/QuoteSimulator"
 import { EditContactDialog } from "@/components/forms/EditContactDialog"
+import { NewContactDialog } from "@/components/forms/NewContactDialog"
 
 export function ContactsSimple({ onlyClients = false, excludeClients = false }: { onlyClients?: boolean; excludeClients?: boolean }) {
   const [search, setSearch] = useState("")
@@ -23,9 +24,11 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   const { toast } = useToast()
   const [simulateOpen, setSimulateOpen] = useState(false)
   const [simulateContact, setSimulateContact] = useState<ContactDTO | null>(null)
+  const [openNew, setOpenNew] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [tagValue, setTagValue] = useState("")
   const [tagIds, setTagIds] = useState<number[]>([])
+  const [importing, setImporting] = useState(false)
   const predefinedTags = [
     'Techo Propio',
     'Credito Mivivienda',
@@ -43,6 +46,37 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       toast({ title:'No se pudo guardar', description:e.message || '', variant:'destructive' })
       throw e
     }
+
+  async function handleCreateContact(data: any) {
+    try {
+      const created = await createContact(data)
+      // Aplicar filtros actuales (onlyClients/excludeClients)
+      const tipo = (created.tipo || '').toLowerCase()
+      const etiquetas = (Array.isArray(created.etiquetas) ? created.etiquetas : ((created as any).etiqueta ? [(created as any).etiqueta] : []))
+      const isClient = tipo === 'cliente' || etiquetas.some((e: string) => (e||'').toLowerCase()==='cliente')
+      if ((onlyClients && isClient) || (excludeClients && !isClient) || (!onlyClients && !excludeClients)) {
+        setContacts(prev => [created as ContactDTO, ...prev])
+      }
+      toast({ title: 'Contacto creado' })
+    } catch(e:any) {
+      toast({ title:'No se pudo crear', description:e.message || '', variant:'destructive' })
+      throw e
+    }
+  }
+  
+  async function importFromGoogle() {
+    try {
+      setImporting(true)
+      const base = (process.env.NEXT_PUBLIC_API_URL || '')
+      const url = base ? `${base}/api/google/contacts/sync` : '/api/google/contacts/sync'
+      const res = await fetch(url, { method:'POST', credentials:'include' })
+      if (!res.ok) throw new Error('No se pudo importar desde Google')
+      toast({ title:'Importación iniciada' })
+      // pequeña espera y refresco
+      setTimeout(() => { load() }, 800)
+    } catch(e:any) {
+      toast({ title:'Error importando', description:e.message || '', variant:'destructive' })
+    } finally { setImporting(false) }
   }
   
 
@@ -75,8 +109,13 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
     if (!ids.length) return
     try {
       const isCustom = !!(value && !predefinedTags.includes(value))
-      await bulkTagContacts(ids, value || '', isCustom ? value : undefined)
-      // Refrescar desde servidor para asegurar persistencia real
+      // Compatibilidad: si el servidor no tiene etiquetas_json, se guardará en origen/medio_contacto
+      for (const id of ids) {
+        const payload: any = value
+          ? { etiquetas: [value], etiqueta_otro: isCustom ? value : '', origen: value }
+          : { etiquetas: [], etiqueta_otro: '', origen: null }
+        await updateContact(id, payload)
+      }
       await load()
       toast({ title: 'Etiqueta aplicada', description: value || 'Sin etiqueta' })
     } catch(e:any) {
@@ -122,15 +161,19 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-3 items-end">
-        <div className="flex-1">
+      <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[260px]">
           <label className="text-xs text-gray-600">Buscar</label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Nombre, teléfono o email" className="pl-9" />
           </div>
         </div>
-        <Button variant="outline" onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
+          <Button variant="brand" onClick={()=> setOpenNew(true)}>Nuevo contacto</Button>
+          <Button variant="outline" onClick={importFromGoogle} disabled={importing}>{importing ? 'Importando…' : 'Importar Google'}</Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -255,6 +298,12 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
         contact={editingContact}
         onOpenChange={(v)=> { setEditOpen(v); if(!v) setEditingContact(null) }}
         onSubmit={handleEditSubmit}
+      />
+      {/* Nuevo contacto */}
+      <NewContactDialog
+        open={openNew}
+        onOpenChange={setOpenNew}
+        onSubmit={handleCreateContact}
       />
       {/* Barra de acciones masivas */}
       {selected.size > 0 && (
