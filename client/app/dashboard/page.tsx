@@ -4,7 +4,8 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { PipelineBoard } from "@/components/pipeline-board"
-import { ContactsList } from "@/components/contacts-list"
+// Temporarily use simplified contacts to bypass contacts-list.tsx error
+import { ContactsSimple } from "@/components/contacts-simple"
 import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
 import { QuotesHistory } from "@/components/quotes/QuotesHistory"
@@ -74,11 +75,11 @@ function DashboardInner() {
           </TabsContent>
 
           <TabsContent value="contacts" className="space-y-6">
-            <ContactsList />
+            <ContactsSimple excludeClients />
           </TabsContent>
 
           <TabsContent value="clients" className="space-y-6">
-            <ContactsList onlyClients />
+            <ContactsSimple onlyClients />
           </TabsContent>
 
           <TabsContent value="properties" className="space-y-6">

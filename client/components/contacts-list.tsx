@@ -26,7 +26,7 @@ import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
-export function ContactsList({ onlyClients = false }: { onlyClients?: boolean }) {
+export function ContactsList({ onlyClients = false, simpleActions = false }: { onlyClients?: boolean; simpleActions?: boolean }) {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedType, setSelectedType] = useState(onlyClients ? "cliente" : "all")
   const [openNew, setOpenNew] = useState(false)
@@ -72,6 +72,16 @@ export function ContactsList({ onlyClients = false }: { onlyClients?: boolean })
       const raw = localStorage.getItem('contactsTagCache')
       return raw ? JSON.parse(raw) : {}
     } catch { return {} }
+  }
+
+  async function convertToClient(id: number) {
+    try {
+      await updateContact(id, { tipo: 'cliente' } as any)
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, tipo: 'cliente' } : c))
+      toast({ title: 'Convertido a cliente' })
+    } catch (e:any) {
+      toast({ title:'No se pudo convertir', description: e.message || '' , variant:'destructive' })
+    }
   }
   function writeTagCache(cache: Record<string, { etiquetas?: string[]; etiqueta_otro?: string | null }>) {
     try { localStorage.setItem('contactsTagCache', JSON.stringify(cache)) } catch {}
@@ -497,103 +507,111 @@ export function ContactsList({ onlyClients = false }: { onlyClients?: boolean })
   }
 
   function renderCard(c: ContactDTO) {
+    const selected = selectedIds.has(c.id!)
     return (
-      <Card key={c.id} className="border border-gray-200 group">
+      <Card key={c.id} className={`border border-gray-200 group ${selected ? 'ring-2 ring-indigo-500' : ''} cursor-pointer`} onClick={()=> toggleSelected(c.id!)}>
         <CardHeader className="pb-2">
           <CardTitle className="text-base font-semibold gap-2 flex flex-col sm:flex-row sm:items-center sm:justify-between sm:space-y-0 space-y-2">
             <span className="min-w-0 flex items-center gap-2 sm:flex-1">
-              <input type="checkbox" checked={selectedIds.has(c.id!)} onChange={(e)=> toggleSelected(c.id!, e)} />
+              <input type="checkbox" checked={selected} onChange={(e)=> toggleSelected(c.id!, e)} onClick={(e)=> e.stopPropagation()} />
               <button
                 type="button"
                 title={c.nombre}
                 className="text-left hover:underline truncate max-w-full text-sm"
-                onClick={()=>{ setPreviewContact(c); setPreviewOpen(true) }}
+                onClick={(e)=>{ e.stopPropagation(); setPreviewContact(c); setPreviewOpen(true) }}
               >
                 {c.nombre}
               </button>
             </span>
             <div className="flex items-center gap-2 sm:ml-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end max-w-full">
               <Badge className="shrink-0" style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-              <div className="flex gap-1 flex-wrap max-w-full">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
-                  const phone = (c.telefono || '').replace(/\D/g,'')
-                  if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
-                  const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
-                  const url = `https://wa.me/${phone}?text=${msg}`
-                  window.open(url, '_blank')
-                }}>
-                  <MessageSquare className="h-4 w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
-                  const title = encodeURIComponent(`Llamada con ${c.nombre}`)
-                  const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
-                  const start = new Date(Date.now() + 60*60*1000)
-                  const end = new Date(start.getTime() + 30*60*1000)
-                  const fmt = (d:Date)=> d.toISOString().replace(/[-:]|\..*/g,'')
-                  const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
-                  window.open(url, '_blank')
-                }}>
-                  <CalendarIcon className="h-4 w-4" />
-                </Button>
-                {/* Simular cotización */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  title="Simular cotización"
-                  onClick={() => { setSimulateContact(c); setSimulateOpen(true) }}
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-                {/* Crear oportunidad en pipeline (persistente en backend) */}
-                <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
-                  try {
-                    if (creatingOppForId) return;
-                    setCreatingOppForId(c.id!)
-                    // Primero persistimos en backend como oportunidad
-                    const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
-                    // Luego reflejamos en UI local (etapa contacto_inicial)
-                    console.log('[Pipeline] creando oportunidad desde contacto', opp)
-                    addOpportunity('contacto_inicial', {
-                      id: String(opp.id), // usar id backend para permitir persistir movimientos
-                      clientName: opp.nombreCliente || c.nombre,
-                      serviceName: 'Cotización',
-                      agent: 'Sin asignar',
-                      value: opp.valorUsd || 0,
-                      probability: opp.probabilidad || 0,
-                      closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10),
-                      phone: opp.telefono || c.telefono || '',
-                      email: opp.email || c.email || ''
-                    })
-                    // Actualizar tipo del contacto a 'cliente' (backend + UI)
-                    try {
-                      await updateContact(c.id!, { tipo: 'cliente' })
-                      setContacts(prev => prev.map(x => x.id === c.id ? { ...x, tipo: 'cliente' } : x))
-                    } catch(_) { /* no bloquear por este fallo */ }
-                    toast({ title: 'Oportunidad creada', description: c.nombre })
-                    // Cambiar automáticamente a la pestaña pipeline para mostrar la nueva oportunidad
-                    setActiveTab('pipeline')
-                    console.log('[Pipeline] estado añadido, navegando a pipeline')
-                  } catch(e:any) {
-                    let msg = e.message || 'No se pudo crear oportunidad'
-                    const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
-                    let status = ''
-                    if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/, '') }
-                    if (status === '401') msg = 'Sesión expirada o no autenticado'
-                    if (status === '403') msg = 'Sin permisos para crear oportunidades'
-                    toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
-                    console.error('[Pipeline] error creando oportunidad', status, e)
-                  } finally { setCreatingOppForId(null) }
-                }}>
-                  <Workflow className="h-4 w-4" />
-                </Button>
-                {/* Botón de eliminar visible para todos; el backend restringe a admin y el handler muestra mensaje si no tiene permisos */}
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
-                  {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                </Button>
+              <div className="flex gap-1 flex-wrap max-w-full" onClick={(e)=> e.stopPropagation()}>
+                {/* Acciones simplificadas */}
+                {simpleActions ? (
+                  <>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => convertToClient(c.id!)} title="Convertir a cliente">
+                      <Workflow className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
+                      {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
+                      const phone = (c.telefono || '').replace(/\D/g,'')
+                      if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
+                      const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
+                      const url = `https://wa.me/${phone}?text=${msg}`
+                      window.open(url, '_blank')
+                    }}>
+                      <MessageSquare className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
+                      const title = encodeURIComponent(`Llamada con ${c.nombre}`)
+                      const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
+                      const start = new Date(Date.now() + 60*60*1000)
+                      const end = new Date(start.getTime() + 30*60*1000)
+                      const fmt = (d:Date)=> d.toISOString().replace(/[-:]|\..*/g,'')
+                      const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
+                      window.open(url, '_blank')
+                    }}>
+                      <CalendarIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Simular cotización"
+                      onClick={() => { setSimulateContact(c); setSimulateOpen(true) }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
+                      try {
+                        if (creatingOppForId) return;
+                        setCreatingOppForId(c.id!)
+                        const opp = await createOpportunityFromContact({ id: c.id, nombre: c.nombre, telefono: c.telefono, email: c.email })
+                        addOpportunity('contacto_inicial', {
+                          id: String(opp.id),
+                          clientName: opp.nombreCliente || c.nombre,
+                          serviceName: 'Cotización',
+                          agent: 'Sin asignar',
+                          value: opp.valorUsd || 0,
+                          probability: opp.probabilidad || 0,
+                          closeDate: opp.fechaCierre || new Date().toISOString().slice(0,10),
+                          phone: opp.telefono || c.telefono || '',
+                          email: opp.email || c.email || ''
+                        })
+                        try {
+                          await updateContact(c.id!, { tipo: 'cliente' })
+                          setContacts(prev => prev.map(x => x.id === c.id ? { ...x, tipo: 'cliente' } : x))
+                        } catch(_) {}
+                        toast({ title: 'Oportunidad creada', description: c.nombre })
+                        setActiveTab('pipeline')
+                      } catch(e:any) {
+                        let msg = e.message || 'No se pudo crear oportunidad'
+                        const statusMatch = msg.match(/\|STATUS:(\d{3})$/)
+                        let status = ''
+                        if (statusMatch) { status = statusMatch[1]; msg = msg.replace(/\|STATUS:\d{3}$/, '') }
+                        if (status === '401') msg = 'Sesión expirada o no autenticado'
+                        if (status === '403') msg = 'Sin permisos para crear oportunidades'
+                        toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
+                      } finally { setCreatingOppForId(null) }
+                    }}>
+                      <Workflow className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
+                      {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </CardTitle>
@@ -623,6 +641,7 @@ export function ContactsList({ onlyClients = false }: { onlyClients?: boolean })
           </div>
         </DialogContent>
       </Dialog>
+      {!simpleActions && (
       <div className="flex items-center justify-end">
         <div className="flex gap-2 items-center">
           {/* Indicador de conexión Google */}
@@ -702,6 +721,7 @@ export function ContactsList({ onlyClients = false }: { onlyClients?: boolean })
       </div>
 
       {/* Filters */}
+      {!simpleActions && (
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-4">

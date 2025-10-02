@@ -40,6 +40,7 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
   const [form, setForm] = React.useState<EditContactFormValues>({ nombre: '', apellido: '', email: '', telefono: '', dni: '', tipo: 'lead', origen: 'web', notas: '', departamento: '', sexo: undefined, fecha_nacimiento: '', etiquetas: [], etiqueta_otro: '' });
   const [loading, setLoading] = React.useState(false);
   const [showOther, setShowOther] = React.useState(false);
+  const nameRef = React.useRef<HTMLInputElement | null>(null)
 
   // Sincronizar al abrir con el contacto seleccionado
   React.useEffect(() => {
@@ -87,7 +88,7 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg sm:max-w-xl p-6 max-h-[85vh] overflow-y-auto bg-white border border-gray-200 text-gray-900 shadow-xl">
+      <DialogContent className="max-w-2xl w-[96vw] p-6 max-h-[88vh] overflow-y-auto bg-white border border-gray-200 text-gray-900 shadow-xl">
         <DialogHeader>
           <DialogTitle className="text-lg">Editar Contacto</DialogTitle>
         </DialogHeader>
@@ -95,7 +96,7 @@ export function EditContactDialog({ open, contact, onOpenChange, onSubmit }: Pro
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[12px] font-medium text-muted-foreground">Nombre</label>
-              <Input name="nombre" value={form.nombre} onChange={handleChange} placeholder="Nombre" className="h-9" />
+              <Input ref={nameRef} name="nombre" value={form.nombre} onChange={handleChange} placeholder="Nombre" className="h-9" />
             </div>
             <div>
               <label className="text-[12px] font-medium text-muted-foreground">Apellido (opcional)</label>
