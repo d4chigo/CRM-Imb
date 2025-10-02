@@ -28,6 +28,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   const [tagValue, setTagValue] = useState("")
   const [tagIds, setTagIds] = useState<number[]>([])
   const [openNew, setOpenNew] = useState(false)
+  const [importing, setImporting] = useState(false)
   const predefinedTags = [
     'Techo Propio',
     'Credito Mivivienda',
@@ -45,24 +46,44 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       throw e
     }
   }
-  // Importar contactos desde Google (simple): intenta sincronizar; si falta auth, abre auth-url
+  // Importar desde Google: siempre abre ventana de login OAuth primero y luego intenta sincronizar
   async function importFromGoogle() {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
     try {
-      const res = await fetch(`${base}/api/google/contacts/sync`, { method: 'POST', credentials: 'include' })
-      if (res.status === 401) {
-        const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include' })
+      setImporting(true)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+      // 1) Obtener URL de autenticación y abrir ventana
+      let authUrl = ''
+      try {
+        const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } as any : undefined })
         const data = await u.json().catch(()=>({}))
-        const url = data?.data?.url || data?.url
-        if (url) window.open(url, '_blank')
-        toast({ title:'Autenticación requerida', description:'Completa con Google y vuelve a intentar.' })
-        return
+        authUrl = data?.data?.url || data?.url || ''
+      } catch { /* ignore */ }
+      if (!authUrl) {
+        // fallback: abrir endpoint directo (puede redirigir por sí mismo)
+        authUrl = `${base}/api/google/contacts/auth-url`
       }
-      if (!res.ok) throw new Error(await res.text())
+      // Abrir en pestaña nueva (dispara flujo OAuth)
+      const w = window.open(authUrl, '_blank')
+      if (w && typeof w.focus === 'function') w.focus()
+      toast({ title:'Inicia sesión con Google', description:'Autoriza el acceso y luego vuelve aquí para sincronizar.' })
+
+      // 2) Intentar sincronización (en segundo plano); si aún no hay auth, servidor responderá 401
+      const res2 = await fetch(`${base}/api/google/contacts/sync`, { method: 'POST', credentials: 'include', headers })
+      if (!res2.ok) {
+        if (res2.status === 401) {
+          // Usuario aún no autorizó; solo informamos
+          toast({ title:'Esperando autorización', description:'Completa el login en la ventana abierta y vuelve a intentar.', variant:'destructive' })
+          return
+        }
+        throw new Error((await res2.text()) || 'Error en sincronización')
+      }
+      toast({ title:'Importación iniciada', description:'Sincronizando en segundo plano…' })
       await load()
     } catch(e:any) {
       toast({ title:'No se pudo importar', description: e.message || 'Error al comunicar con Google', variant:'destructive' })
-    }
+    } finally { setImporting(false) }
   }
 
   async function load() {
@@ -151,7 +172,9 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
         </div>
         <div className="flex gap-2">
           {excludeClients && (
-            <Button variant="outline" onClick={importFromGoogle}>Importar Google</Button>
+            <Button variant="outline" onClick={importFromGoogle} disabled={importing || loading}>
+              {importing ? 'Importando…' : 'Importar Google'}
+            </Button>
           )}
           <Button variant="brand" onClick={()=> setOpenNew(true)}>Nuevo contacto</Button>
           <Button variant="outline" onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
