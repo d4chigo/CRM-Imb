@@ -74,7 +74,12 @@ export async function fetchContacts(params?: {
     } as HeadersInit, 
     credentials: 'include' 
   });
-  if (!res.ok) throw new Error('Error listando contactos');
+  if (!res.ok) {
+    let serverMsg = ''
+    try { const d = await res.json(); serverMsg = d?.message || '' } catch(_) { try { serverMsg = await res.text() } catch(_) {} }
+    const base = serverMsg || 'Error listando contactos'
+    throw new Error(`${base}|STATUS:${res.status}`)
+  }
   const data = await res.json();
   return { 
     data: data.data || [], 

@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Pencil, Trash2, CheckCircle2, PlusCircle, Tag as TagIcon } from "lucide-react"
-import { fetchContacts, updateContact, deleteContact, ContactDTO, createContact } from "@/lib/contacts"
+import { fetchContacts, updateContact, deleteContact, ContactDTO, bulkTagContacts, createContact } from "@/lib/contacts"
 import { useToast } from "@/hooks/use-toast"
 import { QuoteSimulator } from "@/components/quotes/QuoteSimulator"
-import { EditContactDialog } from "@/components/forms/EditContactDialog"
+import { EditContactDialog, type EditContactFormValues } from "@/components/forms/EditContactDialog"
 import { NewContactDialog } from "@/components/forms/NewContactDialog"
 
 export function ContactsSimple({ onlyClients = false, excludeClients = false }: { onlyClients?: boolean; excludeClients?: boolean }) {
@@ -24,21 +24,19 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   const { toast } = useToast()
   const [simulateOpen, setSimulateOpen] = useState(false)
   const [simulateContact, setSimulateContact] = useState<ContactDTO | null>(null)
-  const [openNew, setOpenNew] = useState(false)
   const [tagOpen, setTagOpen] = useState(false)
   const [tagValue, setTagValue] = useState("")
   const [tagIds, setTagIds] = useState<number[]>([])
-  const [importing, setImporting] = useState(false)
+  const [openNew, setOpenNew] = useState(false)
   const predefinedTags = [
     'Techo Propio',
     'Credito Mivivienda',
-    'Terreno en Captacion',
     'Tasaciones',
     'Construccion',
     'Levantamiento Topografico',
   ]
   
-  async function handleEditSubmit(id: number, data: any) {
+  async function handleEditSubmit(id: number, data: EditContactFormValues): Promise<void> {
     try {
       const updated = await updateContact(id, data)
       setContacts(prev => prev.map(c => c.id===id ? { ...c, ...updated } : c))
@@ -46,39 +44,26 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       toast({ title:'No se pudo guardar', description:e.message || '', variant:'destructive' })
       throw e
     }
-
-  async function handleCreateContact(data: any) {
+  }
+  // Importar contactos desde Google (simple): intenta sincronizar; si falta auth, abre auth-url
+  async function importFromGoogle() {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
     try {
-      const created = await createContact(data)
-      // Aplicar filtros actuales (onlyClients/excludeClients)
-      const tipo = (created.tipo || '').toLowerCase()
-      const etiquetas = (Array.isArray(created.etiquetas) ? created.etiquetas : ((created as any).etiqueta ? [(created as any).etiqueta] : []))
-      const isClient = tipo === 'cliente' || etiquetas.some((e: string) => (e||'').toLowerCase()==='cliente')
-      if ((onlyClients && isClient) || (excludeClients && !isClient) || (!onlyClients && !excludeClients)) {
-        setContacts(prev => [created as ContactDTO, ...prev])
+      const res = await fetch(`${base}/api/google/contacts/sync`, { method: 'POST', credentials: 'include' })
+      if (res.status === 401) {
+        const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include' })
+        const data = await u.json().catch(()=>({}))
+        const url = data?.data?.url || data?.url
+        if (url) window.open(url, '_blank')
+        toast({ title:'Autenticación requerida', description:'Completa con Google y vuelve a intentar.' })
+        return
       }
-      toast({ title: 'Contacto creado' })
+      if (!res.ok) throw new Error(await res.text())
+      await load()
     } catch(e:any) {
-      toast({ title:'No se pudo crear', description:e.message || '', variant:'destructive' })
-      throw e
+      toast({ title:'No se pudo importar', description: e.message || 'Error al comunicar con Google', variant:'destructive' })
     }
   }
-  
-  async function importFromGoogle() {
-    try {
-      setImporting(true)
-      const base = (process.env.NEXT_PUBLIC_API_URL || '')
-      const url = base ? `${base}/api/google/contacts/sync` : '/api/google/contacts/sync'
-      const res = await fetch(url, { method:'POST', credentials:'include' })
-      if (!res.ok) throw new Error('No se pudo importar desde Google')
-      toast({ title:'Importación iniciada' })
-      // pequeña espera y refresco
-      setTimeout(() => { load() }, 800)
-    } catch(e:any) {
-      toast({ title:'Error importando', description:e.message || '', variant:'destructive' })
-    } finally { setImporting(false) }
-  }
-  
 
   async function load() {
     setLoading(true)
@@ -109,13 +94,8 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
     if (!ids.length) return
     try {
       const isCustom = !!(value && !predefinedTags.includes(value))
-      // Compatibilidad: si el servidor no tiene etiquetas_json, se guardará en origen/medio_contacto
-      for (const id of ids) {
-        const payload: any = value
-          ? { etiquetas: [value], etiqueta_otro: isCustom ? value : '', origen: value }
-          : { etiquetas: [], etiqueta_otro: '', origen: null }
-        await updateContact(id, payload)
-      }
+      await bulkTagContacts(ids, value || '', isCustom ? value : undefined)
+      // Refrescar desde servidor para asegurar persistencia real
       await load()
       toast({ title: 'Etiqueta aplicada', description: value || 'Sin etiqueta' })
     } catch(e:any) {
@@ -162,7 +142,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-[260px]">
+        <div className="flex-1">
           <label className="text-xs text-gray-600">Buscar</label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -170,9 +150,11 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
+          {excludeClients && (
+            <Button variant="outline" onClick={importFromGoogle}>Importar Google</Button>
+          )}
           <Button variant="brand" onClick={()=> setOpenNew(true)}>Nuevo contacto</Button>
-          <Button variant="outline" onClick={importFromGoogle} disabled={importing}>{importing ? 'Importando…' : 'Importar Google'}</Button>
+          <Button variant="outline" onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
         </div>
       </div>
 
@@ -187,22 +169,21 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
                   <Badge className="shrink-0 bg-emerald-600 text-white">{(c.tipo||'lead')==='cliente' ? 'Cliente' : (c.tipo||'lead')}</Badge>
                 </CardTitle>
                 <CardDescription className="text-xs text-gray-500 truncate">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
-                {(() => { const t = (Array.isArray(c.etiquetas) && c.etiquetas[0]) || (c as any).etiqueta || '';
-                  return t ? (
-                    <div className="mt-1 flex items-center gap-1">
-                      <Badge variant="outline" className="text-[11px] px-2 py-0 h-5 inline-flex items-center gap-1">
-                        <span className="truncate max-w-[160px]">{t}</span>
-                        <button
-                          type="button"
-                          aria-label="Quitar etiqueta"
-                          className="text-gray-500 hover:text-gray-700 ml-1"
-                          onClick={(e)=> { e.stopPropagation(); removeTagSingle(c.id!) }}
-                        >
-                          ×
-                        </button>
-                      </Badge>
-                    </div>
-                  ) : null })()}
+                {((Array.isArray(c.etiquetas) && c.etiquetas[0]) || (c as any).etiqueta) && (
+                  <div className="mt-1 flex items-center gap-1">
+                    <Badge variant="outline" className="text-[11px] px-2 py-0 h-5 inline-flex items-center gap-1">
+                      <span className="truncate max-w-[160px]">{(Array.isArray(c.etiquetas) && c.etiquetas[0]) || (c as any).etiqueta}</span>
+                      <button
+                        type="button"
+                        aria-label="Quitar etiqueta"
+                        className="text-gray-500 hover:text-gray-700 ml-1"
+                        onClick={(e)=> { e.stopPropagation(); removeTagSingle(c.id!) }}
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2 pt-0" onClick={(e)=> e.stopPropagation()}>
                 <Button size="sm" variant="outline" onClick={()=> { setEditingContact(c); setEditOpen(true) }}>
@@ -299,11 +280,20 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
         onOpenChange={(v)=> { setEditOpen(v); if(!v) setEditingContact(null) }}
         onSubmit={handleEditSubmit}
       />
-      {/* Nuevo contacto */}
+      {/* Dialog nuevo contacto */}
       <NewContactDialog
         open={openNew}
         onOpenChange={setOpenNew}
-        onSubmit={handleCreateContact}
+        onSubmit={async (data)=>{
+          try {
+            const created = await createContact(data as any)
+            setOpenNew(false)
+            toast({ title:'Contacto creado', description: created?.nombre || '' })
+            await load()
+          } catch(e:any) {
+            toast({ title:'No se pudo crear', description: e.message || '', variant:'destructive' })
+          }
+        }}
       />
       {/* Barra de acciones masivas */}
       {selected.size > 0 && (
