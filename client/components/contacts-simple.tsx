@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Search, Pencil, Trash2, CheckCircle2, PlusCircle, Tag as TagIcon } from "lucide-react"
-import { fetchContacts, updateContact, deleteContact, ContactDTO } from "@/lib/contacts"
+import { fetchContacts, updateContact, deleteContact, ContactDTO, bulkTagContacts } from "@/lib/contacts"
 import { useToast } from "@/hooks/use-toast"
 import { QuoteSimulator } from "@/components/quotes/QuoteSimulator"
 import { EditContactDialog } from "@/components/forms/EditContactDialog"
@@ -74,14 +74,10 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   async function applyTag(ids: number[], value: string) {
     if (!ids.length) return
     try {
-      const isCustom = value && !predefinedTags.includes(value)
-      for (const id of ids) {
-        const payload: any = value
-          ? { etiquetas: [value], etiqueta: value, etiqueta_otro: isCustom ? value : '' }
-          : { etiquetas: [], etiqueta: '', etiqueta_otro: '' }
-        await updateContact(id, payload)
-      }
-      setContacts(prev => prev.map(c => ids.includes(c.id!) ? { ...c, etiquetas: value ? [value] : [], etiqueta: value, etiqueta_otro: (value && !predefinedTags.includes(value)) ? value : '' } : c))
+      const isCustom = !!(value && !predefinedTags.includes(value))
+      await bulkTagContacts(ids, value || '', isCustom ? value : undefined)
+      // Refrescar desde servidor para asegurar persistencia real
+      await load()
       toast({ title: 'Etiqueta aplicada', description: value || 'Sin etiqueta' })
     } catch(e:any) {
       toast({ title:'No se pudo etiquetar', description:e.message || '', variant:'destructive' })
