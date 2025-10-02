@@ -44,6 +44,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       throw e
     }
   }
+  
 
   async function load() {
     setLoading(true)
@@ -73,10 +74,14 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   async function applyTag(ids: number[], value: string) {
     if (!ids.length) return
     try {
+      const isCustom = value && !predefinedTags.includes(value)
       for (const id of ids) {
-        await updateContact(id, { etiqueta: value } as any)
+        const payload: any = value
+          ? { etiquetas: [value], etiqueta: value, etiqueta_otro: isCustom ? value : '' }
+          : { etiquetas: [], etiqueta: '', etiqueta_otro: '' }
+        await updateContact(id, payload)
       }
-      setContacts(prev => prev.map(c => ids.includes(c.id!) ? { ...c, etiquetas: value ? [value] : [], etiqueta: value } : c))
+      setContacts(prev => prev.map(c => ids.includes(c.id!) ? { ...c, etiquetas: value ? [value] : [], etiqueta: value, etiqueta_otro: (value && !predefinedTags.includes(value)) ? value : '' } : c))
       toast({ title: 'Etiqueta aplicada', description: value || 'Sin etiqueta' })
     } catch(e:any) {
       toast({ title:'No se pudo etiquetar', description:e.message || '', variant:'destructive' })
@@ -85,6 +90,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       setTagIds([])
     }
   }
+  const removeTagSingle = async (id: number) => { await applyTag([id], '') }
   useEffect(()=>{ const t=setTimeout(load, 250); return ()=> clearTimeout(t) }, [search])
 
   function toggle(id:number) {
@@ -144,8 +150,18 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
                 <CardDescription className="text-xs text-gray-500 truncate">{c.email || 'Sin email'} · {c.telefono || 'Sin teléfono'}</CardDescription>
                 {(() => { const t = (Array.isArray(c.etiquetas) && c.etiquetas[0]) || (c as any).etiqueta || '';
                   return t ? (
-                    <div className="mt-1">
-                      <Badge variant="outline" className="text-[11px]">{t}</Badge>
+                    <div className="mt-1 flex items-center gap-1">
+                      <Badge variant="outline" className="text-[11px] px-2 py-0 h-5 inline-flex items-center gap-1">
+                        <span className="truncate max-w-[160px]">{t}</span>
+                        <button
+                          type="button"
+                          aria-label="Quitar etiqueta"
+                          className="text-gray-500 hover:text-gray-700 ml-1"
+                          onClick={(e)=> { e.stopPropagation(); removeTagSingle(c.id!) }}
+                        >
+                          ×
+                        </button>
+                      </Badge>
                     </div>
                   ) : null })()}
               </CardHeader>
@@ -246,7 +262,14 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       />
       {/* Barra de acciones masivas */}
       {selected.size > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white border shadow-lg rounded-full px-3 py-2 flex items-center gap-2">
+        <div
+          className={
+            `fixed bottom-4 left-1/2 -translate-x-1/2 z-40 shadow-2xl rounded-full px-3 py-2 flex items-center gap-2 backdrop-blur ` +
+            (onlyClients
+              ? 'bg-emerald-50/95 border-4 border-emerald-600 ring-2 ring-emerald-300'
+              : 'bg-indigo-50/95 border-4 border-indigo-600 ring-2 ring-indigo-300')
+          }
+        >
           <span className="text-sm">{selected.size} seleccionado(s)</span>
           <Button size="sm" variant="outline" onClick={()=> setSelected(new Set())}>Limpiar</Button>
           <Button size="sm" variant="outline" onClick={()=> setSelected(new Set(contacts.map(c=> c.id!)))}>Seleccionar todos</Button>
