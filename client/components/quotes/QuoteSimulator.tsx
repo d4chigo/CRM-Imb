@@ -34,9 +34,9 @@ function formatCurrencyPEN(n: number) {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 }
 
-type PaymentMode = 'anualidad' | 'fija' | 'flexible'
+type PaymentMode = 'fija' | 'flexible'
 
-function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0, itfRate = 0.00005, mode = 'anualidad', targetPayment = 500 }: { principal: number; periods: number; teaPct: number; sDesgravamenPct?: number; itfRate?: number; mode?: PaymentMode; targetPayment?: number; }) {
+function generateAmortization({ principal, periods, teaPct, mode = 'fija', targetPayment = 500 }: { principal: number; periods: number; teaPct: number; mode?: PaymentMode; targetPayment?: number; }) {
   const TEM = calcTEM(teaPct)
   let cuotaBaseAnualidad = 0
   if (TEM === 0) {
@@ -49,22 +49,11 @@ function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0,
 
   let remaining = principal
   let totalInterest = 0
-  let totalDesgravamen = 0
   const schedule: Row[] = []
   for (let i=1;i<=periods;i++) {
     const interest = TEM === 0 ? 0 : remaining * TEM
-    const desgravamen = remaining * (sDesgravamenPct/100)
     let cuotaBase = cuotaBaseAnualidad
-    if (mode === 'fija') {
-      // Cuota fija objetivo para los primeros (periods-1), el último liquida todo
-      if (i < periods) {
-        // Asegurar al menos cubrir intereses
-        const minPayment = Math.max(targetPayment, interest + 1)
-        cuotaBase = Math.min(minPayment, remaining + interest) // no sobrepagar más que liquidar
-      } else {
-        cuotaBase = remaining + interest // liquidación final
-      }
-    } else if (mode === 'flexible') {
+    if (mode === 'flexible') {
       if (i < periods) {
         const mult = 0.7 + Math.random() * 0.6 // 0.7x a 1.3x
         const proposed = targetPayment * mult
@@ -75,21 +64,18 @@ function generateAmortization({ principal, periods, teaPct, sDesgravamenPct = 0,
       }
     }
     const amortization = Math.max(0, cuotaBase - interest)
-    const totalBeforeITF = cuotaBase + desgravamen + 0 /*otrosCargos*/
-    const itf = totalBeforeITF * itfRate
-    const monthlyPayment = totalBeforeITF + itf
+    const monthlyPayment = cuotaBase
     const debtEnd = Math.max(0, remaining - amortization)
-    schedule.push({ period: i, debtStart: remaining, interest, amortization, desgravamen, otrosCargos: 0, itf, monthlyPayment, debtEnd })
+    schedule.push({ period: i, debtStart: remaining, interest, amortization, desgravamen: 0, otrosCargos: 0, itf: 0, monthlyPayment, debtEnd })
     remaining = debtEnd
     totalInterest += interest
-    totalDesgravamen += desgravamen
   }
   const totals = {
     monthlyPayment: schedule[0]?.monthlyPayment || 0,
     totalInterest,
-    totalDesgravamen,
-    totalITF: schedule.reduce((s,r)=> s + r.itf, 0),
-    totalToPay: principal + schedule.reduce((s,r)=> s + r.interest + r.desgravamen + r.itf, 0)
+    totalDesgravamen: 0,
+    totalITF: 0,
+    totalToPay: principal + totalInterest
   }
   return { schedule, totals }
 }
@@ -106,7 +92,8 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
   const [months, setMonths] = React.useState<string>("24")
   const [tea, setTea] = React.useState<string>("18")
   const [currency, setCurrency] = React.useState<'PEN'|'USD'>("PEN")
-  const [paymentMode, setPaymentMode] = React.useState<PaymentMode>('anualidad')
+  const [paymentMode, setPaymentMode] = React.useState<PaymentMode>('fija')
+  const [initial, setInitial] = React.useState<string>('0')
   const [targetPayment, setTargetPayment] = React.useState<string>('500')
   const [loading, setLoading] = React.useState(false)
   const [sending, setSending] = React.useState(false)
@@ -174,18 +161,15 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
 
   function onGenerate(e?: React.FormEvent) {
     e?.preventDefault()
-    const p = Number(amount||0)
+    const gross = Number(amount||0)
+    const ini = Number(initial||0)
+    if (ini < 0 || ini > gross) { toast({ title:'Inicial inválido', description:'Debe ser >= 0 y <= Monto', variant:'destructive' }); return }
+    const p = Math.max(0, gross - ini)
     const n = Number(months||0)
     const t = Number(tea||0)
     const tp = Number(targetPayment||500)
     if (!clientName.trim()) { toast({ title:'Falta cliente', variant:'destructive' }); return }
     if (!(p>0) || !(n>0)) { toast({ title:'Monto/plazo inválidos', variant:'destructive' }); return }
-    if (paymentMode !== 'anualidad') {
-      const firstInterest = p * calcTEM(t)
-      if (tp <= firstInterest) {
-        toast({ title:'Cuota objetivo muy baja', description:'La cuota debe cubrir al menos los intereses del primer periodo.', variant:'destructive' })
-      }
-    }
     const data = generateAmortization({ principal: p, periods: n, teaPct: t, mode: paymentMode, targetPayment: tp })
     setResults(data)
   }
@@ -222,7 +206,7 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
       if (/[",\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"'
       return s
     }
-    const header = ['Cuota','#','Saldo Inicial','Interés','Amortización','S. Desgravamen','Otros Cargos','ITF','Cuota Total','Saldo Final']
+    const header = ['Cuota','#','Saldo Inicial','Interés','Amortización','Cuota Total','Saldo Final']
     const lines: string[] = []
     lines.push(`Cliente,${safe(clientName)}`)
     lines.push(`Telefono,${safe(phone || '')}`)
@@ -237,9 +221,6 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
         safe(r.debtStart.toFixed(2)),
         safe(r.interest.toFixed(2)),
         safe(r.amortization.toFixed(2)),
-        safe((r.desgravamen||0).toFixed(2)),
-        safe((r.otrosCargos||0).toFixed(2)),
-        safe((r.itf||0).toFixed(2)),
         safe(r.monthlyPayment.toFixed(2)),
         safe(r.debtEnd.toFixed(2))
       ].join(sep))
@@ -259,16 +240,13 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
 
   function buildTableHtml() {
     if (!results) return ''
-    const headers = ['#','Saldo Inicial','Interés','Amortización','S. Desgravamen','Otros Cargos','ITF','Cuota Total','Saldo Final']
+    const headers = ['#','Saldo Inicial','Interés','Amortización','Cuota Total','Saldo Final']
     const rows = results.schedule.map(r => `
       <tr>
         <td>${r.period}</td>
         <td>${r.debtStart.toFixed(2)}</td>
         <td>${r.interest.toFixed(2)}</td>
         <td>${r.amortization.toFixed(2)}</td>
-        <td>${(r.desgravamen||0).toFixed(2)}</td>
-        <td>${(r.otrosCargos||0).toFixed(2)}</td>
-        <td>${(r.itf||0).toFixed(2)}</td>
         <td>${r.monthlyPayment.toFixed(2)}</td>
         <td>${r.debtEnd.toFixed(2)}</td>
       </tr>`).join('')
@@ -350,6 +328,19 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
   }
 
   const TEM = calcTEM(Number(tea||18))
+  // Cuota fija (constante) calculada automáticamente con TEA (anualidad) sobre Saldo Inicial
+  const fixedPaymentComputed = React.useMemo(() => {
+    const gross = Number(amount||0)
+    const ini = Number((initial||'0'))
+    const principal = Math.max(0, gross - ini)
+    const n = Number(months||0)
+    if (!(principal>0) || !(n>0)) return 0
+    const t = Number(tea||0)
+    const tem = calcTEM(t)
+    if (tem === 0) return principal / n
+    const factor = tem / (1 - Math.pow(1 + tem, -n))
+    return principal * factor
+  }, [amount, initial, months, tea])
 
   return (
     <div className="space-y-6">
@@ -377,10 +368,7 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                   </div>
                 )}
               </div>
-              <div>
-                <label className="text-xs text-gray-600">Teléfono</label>
-                <Input value={phone} readOnly placeholder="Ej. 987654321" />
-              </div>
+              {/* Teléfono se muestra en resumen si se selecciona, pero no hay campo separado de búsqueda */}
               <div>
                 <label className="text-xs text-gray-600">Nombre del Cliente</label>
                 <Input value={clientName} onChange={(e)=> setClientName(e.target.value)} placeholder="Ej. Inversiones Palma Real S.A.C." />
@@ -388,6 +376,10 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
               <div>
                 <label className="text-xs text-gray-600">Monto (PEN)</label>
                 <Input type="number" min="100" step="100" value={amount} onChange={(e)=> setAmount(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-600">Inicial (PEN)</label>
+                <Input type="number" min="0" step="1" value={initial} onChange={(e)=> setInitial(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-gray-600">Plazo (Meses)</label>
@@ -414,20 +406,26 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                 <label className="text-xs text-gray-600">Tipo de Cuota</label>
                 <Select value={paymentMode} onValueChange={(v)=> setPaymentMode(v as PaymentMode)}>
                   <SelectTrigger className="w-full bg-white border border-gray-300 text-gray-800">
-                    <SelectValue placeholder="Anualidad" />
+                    <SelectValue placeholder="Cuota fija" />
                   </SelectTrigger>
                   <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
-                    <SelectItem value="anualidad">Anualidad (Francesa)</SelectItem>
-                    <SelectItem value="fija">Cuota fija objetivo</SelectItem>
+                    <SelectItem value="fija">Cuota fija (constante)</SelectItem>
                     <SelectItem value="flexible">Cuota flexible</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              {(paymentMode === 'fija' || paymentMode === 'flexible') && (
+              {paymentMode === 'flexible' && (
                 <div>
                   <label className="text-xs text-gray-600">Cuota objetivo (PEN)</label>
                   <Input type="number" min="1" step="1" value={targetPayment} onChange={(e)=> setTargetPayment(e.target.value)} />
                   <div className="text-[11px] text-gray-500">Por defecto 500. En el último mes se liquida el saldo.</div>
+                </div>
+              )}
+              {paymentMode === 'fija' && (
+                <div>
+                  <label className="text-xs text-gray-600">Cuota fija (constante)</label>
+                  <Input value={fixedPaymentComputed ? fixedPaymentComputed.toFixed(2) : ''} readOnly />
+                  <div className="text-[11px] text-gray-500">Se calcula con TEA y Saldo Inicial = Monto - Inicial.</div>
                 </div>
               )}
               <div className="pt-2 flex flex-wrap gap-2 items-center">

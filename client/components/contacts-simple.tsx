@@ -37,6 +37,15 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
     'Levantamiento Topografico',
   ]
   
+  // Helpers de API
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+  const buildAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+    const headers: Record<string,string> = { 'Content-Type': 'application/json' }
+    if (token) headers.Authorization = `Bearer ${token}`
+    return headers
+  }
+
   async function handleEditSubmit(id: number, data: EditContactFormValues): Promise<void> {
     try {
       const updated = await updateContact(id, data)
@@ -46,41 +55,81 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
       throw e
     }
   }
-  // Importar desde Google: siempre abre ventana de login OAuth primero y luego intenta sincronizar
+  // Importar contactos desde Google: si ya está conectado, sincroniza; de lo contrario abre popup OAuth y sincroniza
   async function importFromGoogle() {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+    const base = apiBase
     try {
       setImporting(true)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
-      // 1) Obtener URL de autenticación y abrir ventana
-      let authUrl = ''
+      const headers = buildAuthHeaders()
+      // 1) Consultar estado de conexión
+      let connected = false
       try {
-        const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } as any : undefined })
-        const data = await u.json().catch(()=>({}))
-        authUrl = data?.data?.url || data?.url || ''
-      } catch { /* ignore */ }
-      if (!authUrl) {
-        // fallback: abrir endpoint directo (puede redirigir por sí mismo)
-        authUrl = `${base}/api/google/contacts/auth-url`
-      }
-      // Abrir en pestaña nueva (dispara flujo OAuth)
-      const w = window.open(authUrl, '_blank')
-      if (w && typeof w.focus === 'function') w.focus()
-      toast({ title:'Inicia sesión con Google', description:'Autoriza el acceso y luego vuelve aquí para sincronizar.' })
-
-      // 2) Intentar sincronización (en segundo plano); si aún no hay auth, servidor responderá 401
-      const res2 = await fetch(`${base}/api/google/contacts/sync`, { method: 'POST', credentials: 'include', headers })
-      if (!res2.ok) {
-        if (res2.status === 401) {
-          // Usuario aún no autorizó; solo informamos
-          toast({ title:'Esperando autorización', description:'Completa el login en la ventana abierta y vuelve a intentar.', variant:'destructive' })
-          return
+        const st = await fetch(`${base}/api/google/contacts/sync/status`, { credentials: 'include', headers })
+        if (st.ok) {
+          const js = await st.json().catch(()=>({}))
+          connected = !!js?.data?.connected
         }
-        throw new Error((await res2.text()) || 'Error en sincronización')
+      } catch(_) {}
+
+      if (connected) {
+        // 2) Ya conectado: sincroniza directamente
+        const res = await fetch(`${base}/api/google/contacts/sync`, { method: 'POST', credentials: 'include', headers })
+        if (!res.ok) throw new Error((await res.text()) || 'Error en sincronización')
+        const js = await res.json().catch(()=>null)
+        const msg = js?.message || 'Sincronización iniciada'
+        toast({ title:'Importación iniciada', description: msg })
+        await load()
+        return
       }
-      toast({ title:'Importación iniciada', description:'Sincronizando en segundo plano…' })
-      await load()
+
+      // 3) No conectado: abrir popup OAuth y esperar resultado
+      const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include', headers })
+      const data = await u.json().catch(()=>({}))
+      const url = data?.data?.url || data?.url
+      if (!url) throw new Error('No se pudo obtener URL de autorización de Google')
+
+      const w = 600, h = 700
+      const y = window.top?.outerHeight ? Math.max(0, (window.top.outerHeight - h) / 2) : 80
+      const x = window.top?.outerWidth ? Math.max(0, (window.top.outerWidth - w) / 2) : 80
+      const popup = window.open(url, 'google-import', `width=${w},height=${h},left=${x},top=${y}`)
+      if (!popup) throw new Error('No se pudo abrir la ventana de Google (popup bloqueado)')
+
+      toast({ title:'Conecta con Google', description:'Completa la autorización en la ventana emergente' })
+
+      // Listener de mensajes desde el callback
+      const onMessage = async (ev: MessageEvent) => {
+        if (!ev?.data || typeof ev.data !== 'object') return
+        if (ev.data.type === 'google-import-result') {
+          try { window.removeEventListener('message', onMessage) } catch(_) {}
+          toast({ title:'Google conectado', description:`Importados: ${ev.data.imported || 0}, omitidos: ${ev.data.skipped || 0}` })
+          await load()
+          setImporting(false)
+        } else if (ev.data.type === 'google-import-error') {
+          try { window.removeEventListener('message', onMessage) } catch(_) {}
+          toast({ title:'Importación cancelada', description: ev.data.description || 'Se canceló el flujo de autorización', variant:'destructive' })
+          setImporting(false)
+        }
+      }
+      window.addEventListener('message', onMessage)
+
+      // Fallback: si el popup se cierra sin mensaje, recargar estado
+      const poll = setInterval(async () => {
+        if (popup.closed) {
+          clearInterval(poll)
+          try { window.removeEventListener('message', onMessage) } catch(_) {}
+          try {
+            const st2 = await fetch(`${base}/api/google/contacts/sync/status`, { credentials: 'include', headers })
+            if (st2.ok) {
+              const js2 = await st2.json().catch(()=>({}))
+              if (js2?.data?.connected) {
+                toast({ title:'Google conectado', description:'Sincronizando contactos…' })
+                const res2 = await fetch(`${base}/api/google/contacts/sync`, { method:'POST', credentials:'include', headers })
+                if (res2.ok) await load()
+              }
+            }
+          } finally { setImporting(false) }
+        }
+      }, 800)
     } catch(e:any) {
       toast({ title:'No se pudo importar', description: e.message || 'Error al comunicar con Google', variant:'destructive' })
     } finally { setImporting(false) }
