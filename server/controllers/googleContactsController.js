@@ -20,6 +20,7 @@ function getOAuthClient() {
 class GoogleContactsController {
   static authUrl(req, res) {
     try {
+      console.log('[googleImport] Generating auth URL for user:', req.user?.id);
       const oauth2Client = getOAuthClient();
       const scopes = [
         'https://www.googleapis.com/auth/contacts.readonly',
@@ -31,6 +32,11 @@ class GoogleContactsController {
 
       // Incluir el id de usuario en state para persistir tokens en callback
       const userId = (req.user && (req.user.id || req.user.userId)) ? (req.user.id || req.user.userId) : null;
+      if (!userId) {
+        console.error('[googleImport] No user ID found in request');
+        return res.status(401).json({ success: false, message: 'Usuario no identificado' });
+      }
+      
       const statePayload = encodeURIComponent(JSON.stringify({ popup: true, uid: userId }));
       const url = oauth2Client.generateAuthUrl({ 
         access_type: 'offline', 
@@ -40,10 +46,10 @@ class GoogleContactsController {
         include_granted_scopes: true
       });
       
-      console.log('[googleImport] Generada URL de autorización Google');
+      console.log('[googleImport] Generated auth URL for user:', userId);
       res.json({ success: true, url });
     } catch (e) {
-      console.error('[googleImport] Error generando URL:', e.message);
+      console.error('[googleImport] Error generating URL:', e.message);
       res.status(500).json({ success: false, message: e.message });
     }
   }
@@ -102,10 +108,13 @@ class GoogleContactsController {
       // Sincronizar contactos automáticamente
       let syncResult = { synced: 0, total: 0 };
       try {
+        console.log('[googleImport] Starting automatic sync for user:', userId);
         syncResult = await GoogleSyncService.syncGoogleToCRM(userId);
-        console.log(`[googleImport] Sincronización automática completada: ${syncResult.synced} de ${syncResult.total} contactos sincronizados`);
+        console.log(`[googleImport] Automatic sync completed: ${syncResult.synced} of ${syncResult.total} contacts synced`);
       } catch (syncError) {
-        console.error('[googleImport] Error en sincronización automática:', syncError);
+        console.error('[googleImport] Error in automatic sync:', syncError.message || syncError);
+        // Don't fail the callback completely, just log the error
+        syncResult = { synced: 0, total: 0, error: syncError.message || 'Error desconocido en sincronización' };
       }
 
       // Si se abrió en popup, notificar al opener y cerrar
