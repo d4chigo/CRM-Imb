@@ -45,7 +45,8 @@ class StatsController {
       let rows;
       if (req.query.limit) {
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 10, 100));
-        rows = await executeQuery(baseSql + ' LIMIT ?', [limit]);
+  const lim = Number(limit) > 0 && Number(limit) < 10000 ? Number(limit) : 100;
+  rows = await executeQuery(baseSql + ' LIMIT ' + lim);
       } else {
         rows = await executeQuery(baseSql);
       }
@@ -66,7 +67,8 @@ class StatsController {
       let rows;
       if (req.query.limit) {
         const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 10, 10));
-        rows = await executeQuery(baseSql + ' LIMIT ?', [limit]);
+  const lim2 = Number(limit) > 0 && Number(limit) < 10000 ? Number(limit) : 100;
+  rows = await executeQuery(baseSql + ' LIMIT ' + lim2);
       } else {
         rows = await executeQuery(baseSql);
       }

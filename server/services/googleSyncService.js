@@ -25,7 +25,15 @@ class GoogleSyncService {
       [userId]
     );
     
-    if (!tokens) return null;
+    if (!tokens) {
+      console.log('[GoogleSync] No tokens found for user:', userId);
+      return null;
+    }
+
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      console.error('[GoogleSync] Missing Google OAuth credentials in environment');
+      throw new Error('Configuración de Google OAuth incompleta');
+    }
 
     const oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
@@ -39,6 +47,30 @@ class GoogleSyncService {
       scope: tokens.scope,
       token_type: tokens.token_type,
       expiry_date: tokens.expiry_date
+    });
+
+    // Configurar callback para refresh automático de tokens
+    oauth2Client.on('tokens', async (newTokens) => {
+      console.log('[GoogleSync] Refreshing tokens for user:', userId);
+      try {
+        await executeQuery(
+          `UPDATE google_tokens 
+           SET access_token = ?, 
+               refresh_token = COALESCE(?, refresh_token), 
+               expiry_date = ?, 
+               updated_at = NOW()
+           WHERE usuario_id = ?`,
+          [
+            newTokens.access_token,
+            newTokens.refresh_token || null,
+            newTokens.expiry_date || null,
+            userId
+          ]
+        );
+        console.log('[GoogleSync] Tokens updated successfully');
+      } catch (error) {
+        console.error('[GoogleSync] Error updating tokens:', error);
+      }
     });
 
     return oauth2Client;
@@ -168,38 +200,76 @@ class GoogleSyncService {
 
   static async syncGoogleToCRM(userId) {
     try {
+      console.log('[GoogleSync] Starting sync for user:', userId);
       const auth = await this.getAuthClient(userId);
-      if (!auth) return { synced: 0, total: 0 };
+      if (!auth) {
+        console.log('[GoogleSync] No auth client available for user:', userId);
+        return { synced: 0, total: 0 };
+      }
 
       const people = google.people({ version: 'v1', auth });
-      const includeOther = String(process.env.GOOGLE_INCLUDE_OTHER_CONTACTS || '').toLowerCase() === 'true';
+      // Incluir "Other contacts" por defecto salvo que se desactive explícitamente
+      const includeOther = (() => {
+        const raw = String(process.env.GOOGLE_INCLUDE_OTHER_CONTACTS || '').toLowerCase();
+        if (raw === 'false' || raw === '0' || raw === 'no') return false;
+        return true; // default true para maximizar importación
+      })();
 
       // 1) Mis contactos ("Contacts")
-      const connResp = await people.people.connections.list({
-        resourceName: 'people/me',
-        pageSize: 2000,
-        personFields: 'names,emailAddresses,phoneNumbers,organizations,userDefined,biographies,metadata'
-      });
+      console.log('[GoogleSync] Fetching Google contacts...');
+      let connResp;
+      try {
+        connResp = await people.people.connections.list({
+          resourceName: 'people/me',
+          pageSize: 2000,
+          personFields: 'names,emailAddresses,phoneNumbers,organizations,userDefined,biographies,metadata'
+        });
+      } catch (error) {
+        console.error('[GoogleSync] Error fetching connections:', error);
+        if (error.code === 401 || error.message?.includes('invalid_grant')) {
+          throw new Error('Token de Google expirado. Vuelve a autorizar la conexión con Google.');
+        }
+        if (error.code === 403) {
+          throw new Error('Acceso denegado por Google. Verifica que tu cuenta esté autorizada como Test User.');
+        }
+        throw new Error(`Error de Google API: ${error.message}`);
+      }
+      
       const connections = (connResp.data.connections || []).filter(p => {
-        // Filtrar borrados y sin email/teléfono
+        // Filtrar sólo los realmente eliminados; aceptar aunque falte email/teléfono si hay un nombre
         const deleted = p.metadata?.deleted === true;
+        if (deleted) return false;
         const hasEmail = Array.isArray(p.emailAddresses) && p.emailAddresses.some(e=>!!e.value);
         const hasPhone = Array.isArray(p.phoneNumbers) && p.phoneNumbers.some(ph=>!!ph.value);
-        return !deleted && (hasEmail || hasPhone);
+        const hasName = !!(p.names && p.names[0] && (p.names[0].displayName || p.names[0].givenName));
+        if (!(hasEmail || hasPhone || hasName)) {
+          console.log('[GoogleSync] Skipping connection sin datos básicos identificables');
+          return false;
+        }
+        return true;
       });
+      console.log('[GoogleSync] Found', connections.length, 'valid connections');
 
       // 2) Otros contactos ("Other contacts") — opcional y filtrado mínimo
       let otherContacts = [];
       if (includeOther) {
-        const otherResp = await people.otherContacts.list({
-          pageSize: 1000,
-          readMask: 'names,emailAddresses,phoneNumbers',
-        });
-        otherContacts = (otherResp.data.otherContacts || []).filter(p => {
-          const hasEmail = Array.isArray(p.emailAddresses) && p.emailAddresses.some(e=>!!e.value);
-          const hasPhone = Array.isArray(p.phoneNumbers) && p.phoneNumbers.some(ph=>!!ph.value);
-          return hasEmail || hasPhone;
-        });
+        try {
+          console.log('[GoogleSync] Fetching other contacts...');
+          const otherResp = await people.otherContacts.list({
+            pageSize: 1000,
+            readMask: 'names,emailAddresses,phoneNumbers',
+          });
+          otherContacts = (otherResp.data.otherContacts || []).filter(p => {
+            const hasEmail = Array.isArray(p.emailAddresses) && p.emailAddresses.some(e=>!!e.value);
+            const hasPhone = Array.isArray(p.phoneNumbers) && p.phoneNumbers.some(ph=>!!ph.value);
+            const hasName = !!(p.names && p.names[0] && (p.names[0].displayName || p.names[0].givenName));
+            if (!(hasEmail || hasPhone || hasName)) return false;
+            return true;
+          });
+          console.log('[GoogleSync] Found', otherContacts.length, 'other contacts');
+        } catch (error) {
+          console.warn('[GoogleSync] Could not fetch other contacts:', error.message);
+        }
       }
 
       // Unificar y deduplicar por resourceName si existe
@@ -208,13 +278,17 @@ class GoogleSyncService {
       for (const p of connections) { if (p.resourceName && !seen.has(p.resourceName)) { seen.add(p.resourceName); all.push(p); } }
       for (const p of otherContacts) { if (p.resourceName && !seen.has(p.resourceName)) { seen.add(p.resourceName); all.push(p); } }
 
+      console.log('[GoogleSync] Processing', all.length, 'total contacts');
       let synced = 0;
 
       for (const person of all) {
         try {
           const mapped = this.mapGooglePerson(person);
-          // Ignorar entradas sin email y sin teléfono incluso después de mapear
-          if (!mapped.email && !mapped.telefono) continue;
+          // Ya permitimos contactos sin email/teléfono, pero aseguramos que al menos tengan nombre
+          if (!mapped.nombre) {
+            console.log('[GoogleSync] Skipping mapped contact sin nombre identificable');
+            continue;
+          }
 
           // Normalizar teléfono para deduplicación
           const phoneDigits = (mapped.telefono || '').toString().replace(/[^\d]/g, '') || null;
@@ -249,17 +323,21 @@ class GoogleSyncService {
 
           synced++;
         } catch (error) {
-          console.error('Error syncing Google contact:', error?.response?.data || error.message || error);
+          console.error('Error syncing individual Google contact:', error?.response?.data || error.message || error);
         }
       }
 
       // Actualizar última sincronización
       await executeQuery('UPDATE google_tokens SET last_sync = NOW() WHERE usuario_id = ?', [userId]);
-
+      
+      console.log(`[GoogleSync] Completed: ${synced} of ${all.length} contacts synced for user ${userId}`);
       return { synced, total: all.length };
     } catch (error) {
       console.error('Error in Google to CRM sync:', error);
-      throw error;
+      if (error.message && error.message.includes('Token de Google')) {
+        throw error; // Re-throw auth errors as-is
+      }
+      throw new Error(`Error al sincronizar con Google: ${error.message || 'Error desconocido'}`);
     }
   }
 }

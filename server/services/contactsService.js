@@ -69,7 +69,10 @@ class ContactsService {
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const selectName = nameSelectExpr(s) + ' AS nombre';
     const etiquetasExpr = s.hasEtiquetasJson ? 'etiquetas_json' : 'NULL AS etiquetas_json';
-    const rows = await executeQuery(`SELECT id, ${selectName}, email, telefono, dni, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, ${etiquetasExpr}, etiqueta_otro, creado_en FROM ${s.table} ${whereSql} ORDER BY creado_en DESC LIMIT ? OFFSET ?`, [...params, pageSize, offset]);
+  // MySQL no permite parámetros placeholders en LIMIT/OFFSET de manera portable.
+  const safePageSize = Number(pageSize) > 0 && Number(pageSize) <= 500 ? Number(pageSize) : 20;
+  const safeOffset = offset >= 0 ? Number(offset) : 0;
+  const rows = await executeQuery(`SELECT id, ${selectName}, email, telefono, dni, tipo, ${s.origenCol} AS origen, ${s.notasCol} AS notas, departamento, sexo, fecha_nacimiento, ${etiquetasExpr}, etiqueta_otro, creado_en FROM ${s.table} ${whereSql} ORDER BY creado_en DESC LIMIT ${safePageSize} OFFSET ${safeOffset}`, params);
 
     const totalRow = await executeQuery(`SELECT COUNT(1) AS cnt FROM ${s.table} ${whereSql}`, params);
     const total = totalRow?.[0]?.cnt || 0;
