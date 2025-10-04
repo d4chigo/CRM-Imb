@@ -58,6 +58,12 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   // Importar contactos desde Google: si ya está conectado, sincroniza; de lo contrario abre popup OAuth y sincroniza
   async function importFromGoogle() {
     const base = apiBase
+    // Validar existencia de token antes de cualquier llamada para evitar flujo silencioso
+    const rawToken = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
+    if (!rawToken) {
+      toast({ title:'Sesión requerida', description:'Inicia sesión nuevamente antes de importar desde Google.', variant:'destructive' })
+      return
+    }
     try {
       setImporting(true)
       const headers = buildAuthHeaders()
@@ -84,15 +90,22 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
 
       // 3) No conectado: abrir popup OAuth y esperar resultado
       const u = await fetch(`${base}/api/google/contacts/auth-url`, { credentials: 'include', headers })
+      if (!u.ok) {
+        const txt = await u.text().catch(()=> '')
+        throw new Error(`Error solicitando URL (${u.status}) ${txt || ''}`.trim())
+      }
       const data = await u.json().catch(()=>({}))
       const url = data?.data?.url || data?.url
-      if (!url) throw new Error('No se pudo obtener URL de autorización de Google')
+      if (!url) throw new Error('No se obtuvo URL de autorización (respuesta vacía)')
 
       const w = 600, h = 700
       const y = window.top?.outerHeight ? Math.max(0, (window.top.outerHeight - h) / 2) : 80
       const x = window.top?.outerWidth ? Math.max(0, (window.top.outerWidth - w) / 2) : 80
       const popup = window.open(url, 'google-import', `width=${w},height=${h},left=${x},top=${y}`)
-      if (!popup) throw new Error('No se pudo abrir la ventana de Google (popup bloqueado)')
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        toast({ title:'Popup bloqueado', description:'Permite ventanas emergentes para este sitio e inténtalo de nuevo.', variant:'destructive' })
+        throw new Error('Popup bloqueado por el navegador')
+      }
 
       toast({ title:'Conecta con Google', description:'Completa la autorización en la ventana emergente' })
 
@@ -125,6 +138,9 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
                 toast({ title:'Google conectado', description:'Sincronizando contactos…' })
                 const res2 = await fetch(`${base}/api/google/contacts/sync`, { method:'POST', credentials:'include', headers })
                 if (res2.ok) await load()
+              } else {
+                // Mostrar mensaje si se cerró sin conectar
+                toast({ title:'Importación no completada', description:'La ventana se cerró antes de autorizar Google.', variant:'destructive' })
               }
             }
           } finally { setImporting(false) }
