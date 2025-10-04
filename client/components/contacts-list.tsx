@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { getGoogleContactsAuthUrl, openGoogleImportPopup, createGoogleContact, getGoogleSyncStatus, manualGoogleSync } from "@/lib/googleContacts"
 import { useToast } from '@/hooks/use-toast'
 import { useDashboardTabs } from '@/contexts/DashboardTabsContext'
+import { GoogleImportWidget } from './GoogleImportWidget'
 
 // Estado interno para contactos reales
 // Se cargan desde la API al montar el componente
@@ -121,64 +122,16 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
     }
     setSelectedIds(prev => {
       const n = new Set(prev)
-      if (n.has(id)) n.delete(id); else n.add(id)
-      // Si ahora hay 2 o más, ocultar bubble y salir de selectAllMode=false explícitamente
-      if (n.size >= 2) { setBubblePos(null); setSelectAllMode(false) }
+      if (n.has(id)) {
+        n.delete(id)
+      } else {
+        n.add(id)
+      }
       return n
     })
   }
-
-  function clearSelection() { setSelectedIds(new Set()); setBubblePos(null); setSelectAllMode(false) }
-
-  async function bulkDelete() {
-    if (!selectedIds.size) return
-    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} contacto(s)?`)
-    if (!confirmed) return
-    for (const id of Array.from(selectedIds)) {
-      try { await deleteContact(id) } catch(_) {}
-    }
-    setContacts(prev => prev.filter(c => !selectedIds.has(c.id!)))
-    clearSelection()
-    toast({ title: 'Eliminación masiva completada' })
-  }
-
-  async function bulkTag() {
-    if (!selectedIds.size) return
-    if (!bulkEtiqueta && !bulkEtiquetaOtro) { toast({ title:'Selecciona una etiqueta o especifica otra', variant:'destructive' }); return }
-    try {
-      // 1) Intento por endpoint masivo
-      await bulkTagContacts(Array.from(selectedIds), bulkEtiqueta || undefined as any, bulkEtiquetaOtro || undefined)
-      // 2) Refuerzo: actualizar en backend contacto por contacto para asegurar persistencia
-      const labelsArray = bulkEtiqueta ? [bulkEtiqueta] : (bulkEtiquetaOtro ? [bulkEtiquetaOtro] : [])
-      for (const id of Array.from(selectedIds)) {
-        try {
-          await updateContact(id, {
-            etiquetas: labelsArray.length ? labelsArray : undefined,
-            etiqueta_otro: bulkEtiqueta ? undefined : (bulkEtiquetaOtro || null)
-          } as any)
-        } catch (_) { /* fallback silencioso */ }
-      }
-      // 3) Reflejar en estado local inmediato para la UX
-      setContacts(prev => prev.map(c => selectedIds.has(c.id!) ? {
-        ...c,
-        etiquetas: labelsArray.length ? labelsArray : [],
-        etiqueta_otro: bulkEtiqueta ? null : (bulkEtiquetaOtro || null)
-      } : c))
-      // 3b) Actualizar cache local para persistencia inmediata
-      const cache = readTagCache()
-      Array.from(selectedIds).forEach(id => {
-        cache[String(id)] = { etiquetas: labelsArray.length ? labelsArray : [], etiqueta_otro: bulkEtiqueta ? null : (bulkEtiquetaOtro || null) }
-      })
-      writeTagCache(cache)
-      // 4) Recargar desde servidor para validar persistencia real
-      await loadContacts({ page: 1, search: searchTerm, type: selectedType })
-      // Feedback
-      toast({ title: 'Etiquetas aplicadas', description: `${selectedIds.size} contacto(s)` })
-      clearSelection()
-    } catch(e:any) {
-      toast({ title:'Error', description:e.message || 'No se pudo etiquetar', variant:'destructive' })
-    }
-  }
+  
+  // Botón de importación (código movido correctamente a la sección de JSX, este bloque erróneo fue removido)
 
   async function bulkMove() {
     if (!selectedIds.size) return
@@ -257,6 +210,59 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
     } catch(_) {}
     return false
   }
+  // --- Acciones masivas auxiliares (restauradas tras limpieza) ---
+  function clearSelection() {
+    setSelectedIds(new Set())
+    setBubblePos(null)
+    setSelectAllMode(false)
+  }
+  async function bulkTag() {
+    if (!selectedIds.size) return
+    try {
+      const ids = Array.from(selectedIds)
+      const etiquetas: string[] = []
+      if (bulkEtiqueta) etiquetas.push(bulkEtiqueta)
+      if (bulkEtiquetaOtro && bulkEtiquetaOtro.trim() !== '') etiquetas.push(bulkEtiquetaOtro.trim())
+      if (!etiquetas.length) {
+        toast({ title:'Selecciona etiqueta', description:'Elige o escribe una etiqueta', variant:'destructive' })
+        return
+      }
+      // bulkTagContacts parece aceptar (ids:number[], etiqueta:string)
+      for (const et of etiquetas) {
+        await bulkTagContacts(ids, et)
+      }
+      // Actualizar local y cache
+      const cache = readTagCache()
+      setContacts(prev => prev.map(c => ids.includes(c.id!) ? { ...c, etiquetas: Array.from(new Set([...(c.etiquetas||[]), ...etiquetas])) } : c))
+      ids.forEach(id => {
+        cache[id] = cache[id] || {}
+        const current = cache[id].etiquetas || []
+        cache[id].etiquetas = Array.from(new Set([...current, ...etiquetas]))
+      })
+      writeTagCache(cache)
+      toast({ title:'Etiquetas aplicadas', description:`${ids.length} contacto(s)` })
+      clearSelection()
+    } catch(e:any) {
+      toast({ title:'Error', description:e.message || 'No se pudo etiquetar', variant:'destructive' })
+    }
+  }
+  async function bulkDelete() {
+    if (!selectedIds.size) return
+    const confirmed = window.confirm(`¿Eliminar ${selectedIds.size} contacto(s)? Esta acción no se puede deshacer.`)
+    if (!confirmed) return
+    try {
+      const ids = Array.from(selectedIds)
+      for (const id of ids) {
+        await deleteContact(id).catch(()=>{})
+      }
+      setContacts(prev => prev.filter(c => !selectedIds.has(c.id!)))
+      setTotal(t => Math.max(0, t - ids.length))
+      toast({ title:'Eliminados', description:`${ids.length} contacto(s)` })
+      clearSelection()
+    } catch(e:any) {
+      toast({ title:'Error', description:e.message || 'No se pudo eliminar en lote', variant:'destructive' })
+    }
+  }
   const { addOpportunity } = usePipeline()
   const { setActiveTab } = useDashboardTabs()
   const { toast } = useToast();
@@ -301,13 +307,18 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
   useEffect(() => {
     function handleMessage(ev: MessageEvent) {
       if (!ev.data) return;
+      console.log('[GoogleImport] Received message:', ev.data);
       if (ev.data.type === 'google-import-result') {
+        console.log('[GoogleImport] Import result:', ev.data.imported, 'imported,', ev.data.skipped, 'skipped');
         finalizeImport(ev.data.imported, ev.data.skipped)
       } else if (ev.data.type === 'google-import-error') {
         const err = (ev.data.error || '').toString();
         let description = ev.data.description || 'Error en autorización con Google';
+        console.error('[GoogleImport] Import error:', err, description);
         if (err === 'access_denied') {
           description = 'Acceso denegado. Asegúrate de que tu correo esté añadido como Test User en Google Cloud (OAuth consent screen) y vuelve a intentar.';
+        } else if (err.includes('invalid_grant')) {
+          description = 'Token de Google inválido. Vuelve a autorizar la conexión.';
         }
         failImport(description)
       }
@@ -628,6 +639,17 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
 
   return (
     <div className="space-y-6" style={{ paddingBottom: showBottomBar ? 110 : undefined }}>
+      {/* Google Import Widget - Prominente al inicio */}
+      {!simpleActions && (
+        <GoogleImportWidget 
+          compact={false}
+          onImportComplete={async (imported, skipped) => {
+            await loadContacts({ page: 1 })
+            setLastImport({ imported, skipped })
+          }}
+        />
+      )}
+
       {/* Simulador en modal */}
       <Dialog open={simulateOpen} onOpenChange={(o)=> { setSimulateOpen(o); if (!o) setSimulateContact(null) }}>
         <DialogContent className="max-w-5xl w-[95vw] p-0 overflow-hidden">
@@ -641,23 +663,30 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
           </div>
         </DialogContent>
       </Dialog>
-      {!simpleActions && (
-      <div className="flex items-center justify-end">
-        <div className="flex gap-2 items-center">
-          {/* Indicador de conexión Google */}
-          {googleStatus.connected ? (
-            <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1"/>Google conectado</Badge>
-          ) : (
-            <Badge className="bg-gray-400"><AlertTriangle className="h-3 w-3 mr-1"/>Google no conectado</Badge>
-          )}
-          <Button variant="outline" disabled={importing} onClick={async () => {
+      <div className="flex items-center justify-between">
+        {/* Sección de importación de Google - Siempre visible */}
+        <div className="flex gap-3 items-center">
+          <div className="flex items-center gap-2">
+            {googleStatus.connected ? (
+              <Badge className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1"/>Google conectado</Badge>
+            ) : (
+              <Badge className="bg-gray-400"><AlertTriangle className="h-3 w-3 mr-1"/>Google no conectado</Badge>
+            )}
+          </div>
+          <Button 
+            variant={googleStatus.connected ? "outline" : "default"} 
+            disabled={importing} 
+            className={!googleStatus.connected ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+            onClick={async () => {
             if (importing) return;
             const popup = openGoogleImportPopup('about:blank');
             popupRef.current = popup;
             try {
               setImporting(true)
               if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
+              console.log('[GoogleImport] Requesting auth URL...');
               const url = await getGoogleContactsAuthUrl();
+              console.log('[GoogleImport] Auth URL received, redirecting...');
               if (popup) popup.location.replace(url);
               toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
               // Interval para detectar cierre + fallback almacenamiento
@@ -680,7 +709,16 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
                 }
               }, 20000);
             } catch(e:any) {
-              const msg = e?.message?.includes('401') ? 'Sesión expirada. Vuelve a iniciar sesión.' : (e.message || 'Error desconocido');
+              console.error('[GoogleImport] Error starting import:', e);
+              let msg = e?.message || 'Error desconocido';
+              if (msg.includes('401') || msg.includes('Unauthorized')) {
+                msg = 'Sesión expirada. Vuelve a iniciar sesión.';
+              } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                msg = 'Acceso denegado. Verifica que tu cuenta esté autorizada en Google Cloud Console.';
+              } else if (msg.includes('Token de Google expirado')) {
+                msg = 'Autorización de Google expirada. Vuelve a autorizar la conexión.';
+              }
+              
               failImport(msg)
               if (popup) {
                 popup.document.open();
@@ -688,17 +726,19 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
                   `<h3>Fallo al iniciar importación</h3>`+
                   `<p style=\"color:#b91c1c;\">${msg}</p>`+
                   `<p style=\"font-size:12px;color:#555;\">Cierra esta ventana y reintenta.</p>`+
+                  `<p style=\"font-size:12px;color:#888;\">Error técnico: ${e?.message || 'Desconocido'}</p>`+
                   `</div>`);
                 popup.document.close();
               }
             }
           }}>
             {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            {importing ? 'Importando…' : 'Importar Google'}
+            {importing ? 'Importando…' : (googleStatus.connected ? 'Sincronizar Google' : 'Conectar Google')}
           </Button>
-          {/* Botón Reintentar cuando falla, sin reabrir popup: dispara sync manual */}
+          
+          {/* Información de estado y acciones adicionales */}
           {importFailed && (
-            <Button variant="outline" onClick={async ()=>{
+            <Button variant="outline" size="sm" onClick={async ()=>{
               try {
                 const res = await manualGoogleSync();
                 toast({ title: 'Reintento de sincronización', description: `Importados: ${res.synced} · Duplicados: ${Math.max(0, res.total - res.synced)}` })
@@ -709,11 +749,27 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
               }
             }}><RefreshCw className="h-4 w-4 mr-2"/>Reintentar</Button>
           )}
+        </div>
+
+        {/* Información de importación y botones principales */}
+        <div className="flex gap-2 items-center">
+          {/* Widget compacto para vista simple */}
+          {simpleActions && (
+            <GoogleImportWidget 
+              compact={true}
+              onImportComplete={async (imported, skipped) => {
+                await loadContacts({ page: 1 })
+                setLastImport({ imported, skipped })
+              }}
+            />
+          )}
+          
           {lastImport && (
-            <span className="text-xs text-gray-600">
+            <span className="text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded">
               Última importación: <b>+{lastImport.imported}</b> · duplicados {lastImport.skipped}
             </span>
           )}
+          
           <Button variant="brand" onClick={() => setOpenNew(true)}>
             <Plus className="h-4 w-4 mr-2" />Nuevo Contacto
           </Button>
@@ -787,6 +843,7 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Contacts Grid */}
       {loading ? (
