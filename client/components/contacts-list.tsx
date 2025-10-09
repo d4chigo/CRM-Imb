@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge, RefreshCw, CheckCircle2, AlertTriangle, Users } from "lucide-react"
+import { Search, Plus, Download, Pencil, Trash2, Loader2, Workflow, MessageSquare, Calendar as CalendarIcon, Merge, RefreshCw, CheckCircle2, AlertTriangle, Users, MoreVertical } from "lucide-react"
 import { QuoteSimulator } from '@/components/quotes/QuoteSimulator'
 import { NewContactDialog, NewContactFormValues } from "@/components/forms/NewContactDialog"
 // Nuevo dialog para edición
@@ -33,7 +33,7 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
   const [openNew, setOpenNew] = useState(false)
   const [contacts, setContacts] = useState<ContactDTO[]>([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(12)
+  const [pageSize, setPageSize] = useState(30)
   const [total, setTotal] = useState(0)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   // Estado para edición
@@ -536,35 +536,28 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
             </span>
             <div className="flex items-center gap-2 sm:ml-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end max-w-full">
               <Badge className="shrink-0" style={{ backgroundColor: getTypeColor(c.tipo || 'lead'), color: '#fff' }}>{getTypeLabel(c.tipo || 'lead')}</Badge>
-              <div className="flex gap-1 flex-wrap max-w-full" onClick={(e)=> e.stopPropagation()}>
-                {/* Acciones simplificadas */}
-                {simpleActions ? (
-                  <>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
-                      <Pencil className="h-4 w-4" />
+              {/* Menú compacto de acciones */}
+              <div onClick={(e)=> e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Acciones">
+                      <MoreVertical className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => convertToClient(c.id!)} title="Convertir a cliente">
-                      <Workflow className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
-                      {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setContactEditing(c); setEditOpen(true) }} title="Editar">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="WhatsApp" onClick={() => {
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[220px] bg-white dark:bg-white text-slate-900 border border-slate-200 shadow-xl">
+                    <DropdownMenuItem onClick={()=> { setContactEditing(c); setEditOpen(true) }}>
+                      <Pencil className="h-4 w-4 mr-2"/> Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={()=>{
                       const phone = (c.telefono || '').replace(/\D/g,'')
                       if (!phone) { toast({ title:'Sin teléfono', description:'El contacto no tiene teléfono', variant:'destructive' }); return }
                       const msg = encodeURIComponent(`Hola ${c.nombre.split(' ')[0]}, soy del equipo IMB. ¿Podemos agendar una llamada para conocer tu interés?`)
                       const url = `https://wa.me/${phone}?text=${msg}`
                       window.open(url, '_blank')
                     }}>
-                      <MessageSquare className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Calendario" onClick={() => {
+                      <MessageSquare className="h-4 w-4 mr-2"/> WhatsApp
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={()=>{
                       const title = encodeURIComponent(`Llamada con ${c.nombre}`)
                       const details = encodeURIComponent(`Contacto: ${c.email || ''} ${c.telefono || ''}`)
                       const start = new Date(Date.now() + 60*60*1000)
@@ -573,18 +566,12 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
                       const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}`
                       window.open(url, '_blank')
                     }}>
-                      <CalendarIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      title="Simular cotización"
-                      onClick={() => { setSimulateContact(c); setSimulateOpen(true) }}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Añadir al pipeline" disabled={creatingOppForId === c.id} onClick={async () => {
+                      <CalendarIcon className="h-4 w-4 mr-2"/> Calendario
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={()=> { setSimulateContact(c); setSimulateOpen(true) }}>
+                      <Plus className="h-4 w-4 mr-2"/> Simular cotización
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={async ()=>{
                       try {
                         if (creatingOppForId) return;
                         setCreatingOppForId(c.id!)
@@ -616,13 +603,16 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
                         toast({ title: 'Error creando oportunidad', description: msg, variant: 'destructive' })
                       } finally { setCreatingOppForId(null) }
                     }}>
-                      <Workflow className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-600" disabled={deletingId === c.id} onClick={() => handleDeleteContact(c.id!)} title="Eliminar">
-                      {deletingId === c.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
-                  </>
-                )}
+                      <Workflow className="h-4 w-4 mr-2"/> Añadir al pipeline
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={()=> convertToClient(c.id!)}>
+                      <CheckCircle2 className="h-4 w-4 mr-2"/> Convertir a cliente
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-red-600 focus:text-red-700" onClick={()=> handleDeleteContact(c.id!)}>
+                      {deletingId === c.id ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />} Eliminar
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </CardTitle>
@@ -678,62 +668,61 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
             disabled={importing} 
             className={!googleStatus.connected ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
             onClick={async () => {
-            if (importing) return;
-            const popup = openGoogleImportPopup('about:blank');
-            popupRef.current = popup;
-            try {
-              setImporting(true)
-              if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
-              console.log('[GoogleImport] Requesting auth URL...');
-              const url = await getGoogleContactsAuthUrl();
-              console.log('[GoogleImport] Auth URL received, redirecting...');
-              if (popup) popup.location.replace(url);
-              toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
-              // Interval para detectar cierre + fallback almacenamiento
-              const started = Date.now();
-              watcherRef.current = window.setInterval(() => {
-                if (checkLocalStorageFallback()) return; // ya se limpió dentro
-                if (popupRef.current && popupRef.current.closed) {
-                  if (Date.now() - started > 800) {
-                    gentleRefreshAfterClose('Se cerró el popup. Actualizando lista…');
-                  } else {
-                    // cierre inmediato: quizá el navegador bloqueó; intentamos fallback
-                    if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Popup bloqueado o cerrado. Actualizando lista…');
+              if (importing) return;
+              try {
+                setImporting(true);
+                setImportFailed(null);
+                // Siempre abrir popup de OAuth. Primero obtenemos la URL.
+                console.log('[GoogleImport] Requesting auth URL...');
+                const url = await getGoogleContactsAuthUrl();
+                console.log('[GoogleImport] Auth URL received. Opening popup...');
+                const w = 600, h = 650;
+                const left = (window.screenX || window.screenLeft || 0) + Math.max(0, ((window.outerWidth || window.innerWidth) - w) / 2);
+                const top = (window.screenY || window.screenTop || 0) + Math.max(0, ((window.outerHeight || window.innerHeight) - h) / 2);
+                const features = `width=${w},height=${h},left=${Math.round(left)},top=${Math.round(top)},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,status=no`;
+                const popup = window.open(url, '_blank', features);
+                popupRef.current = popup as Window | null;
+                // Si el navegador bloquea el popup, redirigir la pestaña actual como fallback
+                if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+                  toast({ title: 'Abriendo Google…', description: 'Tu navegador bloqueó el popup. Redirigiendo en esta pestaña.' });
+                  window.location.href = url;
+                  return;
+                }
+                toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' });
+                // Interval para detectar cierre + fallback almacenamiento
+                const started = Date.now();
+                watcherRef.current = window.setInterval(() => {
+                  if (checkLocalStorageFallback()) return; // ya se limpió dentro
+                  if (popupRef.current && popupRef.current.closed) {
+                    if (Date.now() - started > 800) {
+                      gentleRefreshAfterClose('Se cerró el popup. Actualizando lista…');
+                    } else {
+                      // cierre inmediato: quizá el navegador bloqueó; intentamos fallback
+                      if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Popup bloqueado o cerrado. Actualizando lista…');
+                    }
                   }
+                }, 400);
+                // Timeout duro por si nada llega
+                timeoutRef.current = window.setTimeout(() => {
+                  if (importing) {
+                    if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Tiempo de espera agotado. Actualizando lista…');
+                  }
+                }, 20000);
+              } catch(e:any) {
+                console.error('[GoogleImport] Error starting import:', e);
+                let msg = e?.message || 'Error desconocido';
+                if (msg.includes('401') || msg.includes('Unauthorized')) {
+                  msg = 'Sesión expirada. Vuelve a iniciar sesión.';
+                } else if (msg.includes('403') || msg.includes('Forbidden')) {
+                  msg = 'Acceso denegado. Verifica que tu cuenta esté autorizada en Google Cloud Console.';
+                } else if (msg.includes('Token de Google expirado')) {
+                  msg = 'Autorización de Google expirada. Vuelve a autorizar la conexión.';
                 }
-              }, 400);
-              // Timeout duro por si nada llega
-              timeoutRef.current = window.setTimeout(() => {
-                if (importing) {
-                  if (!checkLocalStorageFallback()) gentleRefreshAfterClose('Tiempo de espera agotado. Actualizando lista…');
-                }
-              }, 20000);
-            } catch(e:any) {
-              console.error('[GoogleImport] Error starting import:', e);
-              let msg = e?.message || 'Error desconocido';
-              if (msg.includes('401') || msg.includes('Unauthorized')) {
-                msg = 'Sesión expirada. Vuelve a iniciar sesión.';
-              } else if (msg.includes('403') || msg.includes('Forbidden')) {
-                msg = 'Acceso denegado. Verifica que tu cuenta esté autorizada en Google Cloud Console.';
-              } else if (msg.includes('Token de Google expirado')) {
-                msg = 'Autorización de Google expirada. Vuelve a autorizar la conexión.';
+                failImport(msg)
               }
-              
-              failImport(msg)
-              if (popup) {
-                popup.document.open();
-                popup.document.write(`<div style="font-family:sans-serif;padding:16px;max-width:360px;">`+
-                  `<h3>Fallo al iniciar importación</h3>`+
-                  `<p style=\"color:#b91c1c;\">${msg}</p>`+
-                  `<p style=\"font-size:12px;color:#555;\">Cierra esta ventana y reintenta.</p>`+
-                  `<p style=\"font-size:12px;color:#888;\">Error técnico: ${e?.message || 'Desconocido'}</p>`+
-                  `</div>`);
-                popup.document.close();
-              }
-            }
-          }}>
+            }}>
             {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            {importing ? 'Importando…' : (googleStatus.connected ? 'Sincronizar Google' : 'Conectar Google')}
+            {importing ? 'Importando…' : 'Importar Google'}
           </Button>
           
           {/* Información de estado y acciones adicionales */}
@@ -864,13 +853,6 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
       ) : (
         <>
           {renderContactsGrid(filteredContacts)}
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-xs text-gray-600">Página {page} de {totalPages} · {total} contacto(s)</div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page<=1} onClick={()=> setPage(p => Math.max(1, p-1))}>Anterior</Button>
-              <Button variant="outline" size="sm" disabled={page>=totalPages} onClick={()=> setPage(p => Math.min(totalPages, p+1))}>Siguiente</Button>
-            </div>
-          </div>
         </>
       )}
       <NewContactDialog
@@ -948,27 +930,11 @@ export function ContactsList({ onlyClients = false, simpleActions = false }: { o
                         for (const d of dups) { await mergeContacts(primary.id!, d.id!).catch(()=>{}) }
                         toast({ title:'Fusión completada', description:`Grupo ${g.by}: ${g.value}` })
                         await loadContacts({ page: 1 })
-                        // Actualizar lista local de duplicados
-                        const rest = [...dupGroups]
-                        rest.splice(idx,1)
-                        setDupGroups(rest)
                       }}>Fusionar grupo</Button>
                     </div>
                   </CardContent>
                 </Card>
               ))}
-              <div className="flex justify-end">
-                <Button onClick={async ()=>{
-                  for (const g of dupGroups) {
-                    if (g.members.length < 2) continue
-                    const [primary, ...dups] = g.members
-                    for (const d of dups) { await mergeContacts(primary.id!, d.id!).catch(()=>{}) }
-                  }
-                  toast({ title:'Fusión en lote', description:`Se fusionaron ${dupGroups.length} grupo(s)` })
-                  setDupsOpen(false)
-                  await loadContacts({ page: 1 })
-                }}>Fusionar todos</Button>
-              </div>
             </div>
           )}
         </DialogContent>

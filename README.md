@@ -131,9 +131,10 @@ CRM-Imb/
 - ✅ Interfaz de login/registro
 - ✅ Dashboard protegido
 - ✅ Configuración de puertos optimizada
-- 🔄 Gestión de contactos (en desarrollo)
-- 🔄 Gestión de propiedades (en desarrollo)
-- 🔄 Pipeline de ventas (en desarrollo)
+- ✅ Gestión de contactos con mejoras recientes
+- ✅ Pipeline de ventas
+- ✅ Cotizaciones
+- ✅ Importación de contactos de Google
 
 ## 🤝 Contribución
 
@@ -160,3 +161,42 @@ GOOGLE_REDIRECT_URI=http://localhost:4000/api/google/contacts/callback
 5. En la vista Contactos pulsa "Importar Google". Se abrirá popup, autoriza y se cerrará con un toast del resultado.
 
 Deduplicación: se omiten contactos cuyo email o teléfono ya existan.
+
+## ✨ Novedades recientes (CRM)
+
+- **Listado de Clientes mejorado** (`client/components/contacts-simple.tsx`):
+  - Filtros por `Etiqueta` y `Etapa de pipeline` visibles solo en vista de clientes (`onlyClients`).
+  - Filtros aplican automáticamente sin botón y consideran todas las páginas (se hace carga completa cuando hay filtros activos).
+  - Render de múltiples etiquetas por cliente (incluye `etiquetas`, legado `etiqueta` y `etiqueta_otro`).
+  - Botón directo de **WhatsApp** por cliente (si hay teléfono).
+  - Acción “**Enviar a pipeline**” por cliente, creando oportunidad base.
+  - Paginación abajo, con página activa resaltada.
+  - Guardado robusto al editar, incluyendo saneo de `fecha_nacimiento` y evitar cadenas vacías.
+
+- **Listado general de Contactos** (`client/components/contacts-list.tsx`):
+  - Menú de acciones compacto y consistente (fondo blanco, texto oscuro).
+  - Diálogo de **duplicados** con acción “Fusionar grupo”.
+  - Barra inferior para acciones masivas (Etiquetar, Pipeline, Eliminar).
+  - Widget de **Importación Google** destacado e integrado.
+
+- **Importación Google** (`client/components/GoogleImportWidget.tsx`):
+  - Manejo de popup y fallbacks (localStorage) más robusto.
+  - Handler `retrySync()` corregido para reintentos.
+
+- **Historial de Cotizaciones** (`client/components/quotes/QuotesHistory.tsx`):
+  - Manejo de **token expirado (401)**: muestra mensaje, limpia token y redirige a `/login` automáticamente.
+
+## 🧭 Uso rápido de las nuevas funciones
+
+- En “Clientes”, usa los selectores de **Etiqueta** y **Etapa** para filtrar; no necesitas “Actualizar”.
+- En cada tarjeta de cliente:
+  - Ícono de **WhatsApp** abre `wa.me` con el número del contacto.
+  - Menú “Enviar a pipeline” crea la oportunidad y marca el contacto como cliente.
+- En “Contactos”, abre “Duplicados” y utiliza “Fusionar grupo” para limpiar registros.
+- En “Cotizaciones → Historial”, si tu sesión expira verás aviso y serás redirigido a iniciar sesión.
+
+## 🔧 Notas técnicas
+
+- El backend puede devolver `etiquetas_json`; el frontend normaliza a `etiquetas` al cargar.
+- El filtrado por etapa cruza contra oportunidades a través de `contactoId` y `etapaId`.
+- Para Google OAuth, asegúrate de configurar las variables y añadir el usuario de prueba en la pantalla de consentimiento.

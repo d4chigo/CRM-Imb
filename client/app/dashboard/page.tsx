@@ -8,7 +8,6 @@ import { PipelineBoard } from "@/components/pipeline-board"
 import { ContactsSimple } from "@/components/contacts-simple"
 import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
-import { QuotesHistory } from "@/components/quotes/QuotesHistory"
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
 import { AppShell } from "@/components/layout/AppShell"
@@ -45,7 +44,6 @@ function DashboardInner() {
     pipeline: 'Pipeline de Ventas',
     contacts: 'Contactos',
     clients: 'Clientes',
-    properties: 'Cotizaciones',
     activities: 'Actividades',
     statistics: 'Estadísticas'
   }[activeTab] || 'Dashboard'
@@ -54,7 +52,6 @@ function DashboardInner() {
     pipeline: 'Arrastra las oportunidades entre las etapas.',
     contacts: 'Gestiona y segmenta tus contactos.',
     clients: 'Contactos etiquetados como clientes. Desde aquí puedes simular, exportar, guardar y enviar al pipeline.',
-    properties: 'Administra tus cotizaciones y servicios.',
     activities: 'Controla tareas y seguimientos.',
     statistics: 'Analiza el rendimiento de tu CRM.',
   }[activeTab] || 'Gestiona tu CRM con una interfaz clara y moderna.'
@@ -82,9 +79,7 @@ function DashboardInner() {
             <ContactsSimple onlyClients />
           </TabsContent>
 
-          <TabsContent value="properties" className="space-y-6">
-            <QuotesHistory />
-          </TabsContent>
+          {/* Cotizaciones movido: ahora el Historial se abre desde Clientes mediante botón */}
 
           <TabsContent value="activities" className="space-y-6">
             <Card>

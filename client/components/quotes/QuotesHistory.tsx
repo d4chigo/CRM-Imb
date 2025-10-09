@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -19,9 +20,12 @@ export function QuotesHistory() {
   const [month, setMonth] = React.useState<string>(monthKey(new Date()))
   const [loading, setLoading] = React.useState(false)
   const [rows, setRows] = React.useState<RowItem[]>([])
+  const [errorMsg, setErrorMsg] = React.useState<string>('')
+  const router = useRouter()
 
   async function load() {
     setLoading(true)
+    setErrorMsg('')
     try {
       // traer contactos (paginado básico)
       const contactsPage = await fetchContacts({ search, page: 1, pageSize: 50 })
@@ -37,6 +41,18 @@ export function QuotesHistory() {
         }
       }))
       setRows(results.filter(r => !!r.quote))
+    } catch (e:any) {
+      const msg: string = (e?.message || '').toString()
+      const m = msg.match(/\|STATUS:(\d{3})$/)
+      const status = m ? m[1] : ''
+      if (status === '401') {
+        // Token expirado: limpiar y redirigir a login
+        try { localStorage.removeItem('authToken') } catch {}
+        setErrorMsg('Sesión expirada. Redirigiendo a inicio de sesión…')
+        setTimeout(() => router.push('/login'), 300)
+        return
+      }
+      setErrorMsg(msg.replace(/\|STATUS:\d{3}$/, '') || 'Error cargando historial')
     } finally { setLoading(false) }
   }
 
@@ -74,6 +90,9 @@ export function QuotesHistory() {
           <CardTitle>Historial de Plantillas (Mes actual)</CardTitle>
         </CardHeader>
         <CardContent>
+          {errorMsg && (
+            <div className="mb-2 text-sm text-red-600">{errorMsg}</div>
+          )}
           {!filtered.length ? (
             <div className="text-sm text-gray-500">No hay plantillas guardadas para este mes con el filtro actual.</div>
           ) : (

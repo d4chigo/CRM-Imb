@@ -38,6 +38,12 @@ export function GoogleImportWidget({ onImportComplete, compact = false }: Google
     }
   }, [])
 
+  // Reintentar sincronización tras un error (handler usado en onClick)
+  function retrySync() {
+    setImportFailed(null)
+    startGoogleImport()
+  }
+
   // Escuchar mensajes del popup
   useEffect(() => {
     function handleMessage(ev: MessageEvent) {
@@ -111,103 +117,58 @@ export function GoogleImportWidget({ onImportComplete, compact = false }: Google
 
   function failImport(message: string) {
     setImporting(false)
-    setImportFailed(message)
-    if (watcherRef.current) clearInterval(watcherRef.current)
-    if (timeoutRef.current) clearTimeout(timeoutRef.current)
     toast({ title: 'Error en importación', description: message, variant: 'destructive' })
   }
 
   async function startGoogleImport() {
     if (importing) return;
-    
-    const popup = openGoogleImportPopup('about:blank');
-    popupRef.current = popup;
-    
     try {
       setImporting(true)
       setImportFailed(null)
-      
-      if (popup) popup.document.write('<p style="font-family:sans-serif;padding:10px;">Obteniendo URL de autorización...</p>');
-      
+      // 1) Obtener URL primero
       console.log('[GoogleImport] Requesting auth URL...');
       const url = await getGoogleContactsAuthUrl();
-      console.log('[GoogleImport] Auth URL received, redirecting...');
-      
-      if (popup) popup.location.replace(url);
-      
-      toast({ 
-        title: 'Redirigiendo a Google', 
-        description: 'Autoriza el acceso y se importarán tus contactos.' 
-      });
-      
-      // Detectar cierre del popup
-      const started = Date.now();
+      console.log('[GoogleImport] Auth URL received. Opening popup...');
+
+      // 2) Intentar abrir popup con la URL directamente
+      const w = 600, h = 650
+      const left = (window.screenX || (window as any).screenLeft || 0) + Math.max(0, ((window.outerWidth || window.innerWidth) - w) / 2)
+      const top = (window.screenY || (window as any).screenTop || 0) + Math.max(0, ((window.outerHeight || window.innerHeight) - h) / 2)
+      const features = `width=${w},height=${h},left=${Math.round(left)},top=${Math.round(top)},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,status=no`
+      const popup = window.open(url, '_blank', features)
+      popupRef.current = popup
+      // 3) Si el popup es bloqueado, redirigir la pestaña actual
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        toast({ title: 'Abriendo Google…', description: 'Tu navegador bloqueó el popup. Redirigiendo en esta pestaña.' })
+        window.location.href = url
+        return
+      }
+
+      toast({ title: 'Redirigiendo a Google', description: 'Autoriza el acceso y se importarán tus contactos.' })
+
+      // 4) Detectar cierre del popup y usar fallback por localStorage
+      const started = Date.now()
       watcherRef.current = setInterval(() => {
         if (checkLocalStorageFallback()) return;
-        
         if (popupRef.current && popupRef.current.closed) {
           if (Date.now() - started > 800) {
-            failImport('Se cerró el popup antes de completar la autorización');
+            failImport('Se cerró el popup antes de completar la autorización')
           } else {
             if (!checkLocalStorageFallback()) {
-              failImport('Popup bloqueado por el navegador o cerrado prematuramente');
+              failImport('Popup bloqueado por el navegador o cerrado prematuramente')
             }
           }
         }
-      }, 400);
-      
-      // Timeout de seguridad
+      }, 400)
+
+      // 5) Timeout de seguridad
       timeoutRef.current = setTimeout(() => {
         if (importing) {
           if (!checkLocalStorageFallback()) {
-            failImport('Tiempo de espera agotado durante la autorización');
+            failImport('Tiempo de espera agotado durante la autorización')
           }
         }
-      }, 30000);
-      
-    } catch (error: any) {
-      console.error('[GoogleImport] Error starting import:', error);
-      let msg = error?.message || 'Error desconocido';
-      
-      if (msg.includes('401') || msg.includes('Unauthorized')) {
-        msg = 'Sesión expirada. Vuelve a iniciar sesión.';
-      } else if (msg.includes('403') || msg.includes('Forbidden')) {
-        msg = 'Acceso denegado. Verifica que tu cuenta esté autorizada en Google Cloud Console.';
-      } else if (msg.includes('Token de Google expirado')) {
-        msg = 'Autorización de Google expirada. Vuelve a autorizar la conexión.';
-      }
-      
-      failImport(msg);
-      
-      if (popup) {
-        popup.document.open();
-        popup.document.write(`
-          <div style="font-family:sans-serif;padding:16px;max-width:360px;text-align:center;">
-            <h3 style="color:#dc2626;">Error al conectar con Google</h3>
-            <p style="color:#b91c1c;">${msg}</p>
-            <p style="font-size:12px;color:#555;margin-top:16px;">Cierra esta ventana y reintenta.</p>
-            <p style="font-size:10px;color:#888;">Error técnico: ${error?.message || 'Desconocido'}</p>
-          </div>
-        `);
-        popup.document.close();
-      }
-    }
-  }
-
-  async function retrySync() {
-    try {
-      setImportFailed(null)
-      const res = await manualGoogleSync();
-      toast({ 
-        title: 'Sincronización completada', 
-        description: `${res.synced} contactos sincronizados de ${res.total}` 
-      })
-      setLastImport({ imported: res.synced, skipped: res.total - res.synced })
-      loadGoogleStatus()
-      
-      if (onImportComplete) {
-        onImportComplete(res.synced, res.total - res.synced)
-      }
+      }, 30000)
     } catch (error: any) {
       toast({ 
         title: 'Error en sincronización', 

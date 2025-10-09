@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
 const { executeQuery } = require('../config/database');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('node:crypto');
 
 // Resolver tabla/columnas variables (singular/plural + alias de columnas)
 let contactSchema = null;
@@ -120,7 +120,7 @@ class GoogleSyncService {
           requestBody: {
             ...contactData,
             contactId: contact.id.toString(),
-            etag: `%E82iL3IxNDgyMDAwMA%3D%3D-${uuidv4()}`
+            etag: `%E82iL3IxNDgyMDAwMA%3D%3D-${randomUUID()}`
           }
         });
       }
