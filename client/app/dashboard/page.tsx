@@ -11,6 +11,7 @@ import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTab
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
 import { AppShell } from "@/components/layout/AppShell"
+import { ActivitiesList } from "@/components/activities/ActivitiesList"
 
 function DashboardInner() {
   const { activeTab, setActiveTab } = useDashboardTabs()
@@ -88,15 +89,7 @@ function DashboardInner() {
                 <CardDescription>Próximas reuniones y seguimientos</CardDescription>
               </CardHeader>
               <CardContent>
-                {/* TODO: Conectar con datos reales de la base de datos */}
-                <div className="p-8 text-center">
-                  <p className="text-gray-500">
-                    Las actividades deben cargarse desde la base de datos.
-                  </p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    Implementar conexión con API de actividades
-                  </p>
-                </div>
+                <ActivitiesList />
               </CardContent>
             </Card>
           </TabsContent>
