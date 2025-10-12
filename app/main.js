@@ -7,10 +7,42 @@ const createWindow = () => {
   const win = new BrowserWindow({
     width: 1280,
     height: 720,
+    backgroundColor: '#ffffff',
+    show: false,
     icon: path.join(__dirname, '..', 'client', 'public', 'imb_logo.png') // icono de la app
   })
 
-  win.loadURL('http://localhost:3000')
+  const targetUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+
+  // Diagnóstico: abrir DevTools en desarrollo
+  if (!app.isPackaged) {
+    win.webContents.openDevTools({ mode: 'detach' })
+  }
+
+  // Limpieza de caché y SW para evitar ChunkLoadError por chunks antiguos en dev
+  const ses = win.webContents.session
+  try {
+    ses.clearCache().catch(()=>{})
+    ses.clearStorageData({ storages: ['appcache','serviceworkers','caches'] }).catch(()=>{})
+  } catch {}
+
+  // Eventos de diagnóstico
+  win.webContents.on('did-finish-load', () => {
+    win.show()
+  })
+  win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[Electron] did-fail-load:', { errorCode, errorDescription, validatedURL })
+    // Reintentar una vez tras breve espera
+    setTimeout(() => {
+      try { win.loadURL(targetUrl) } catch {}
+    }, 800)
+  })
+
+  try {
+    win.loadURL(targetUrl)
+  } catch (e) {
+    console.error('[Electron] loadURL throw:', e?.message)
+  }
 
   // Abrir enlaces externos (ej. Google Calendar, WhatsApp) en el navegador por defecto
   win.webContents.setWindowOpenHandler(({ url }) => {

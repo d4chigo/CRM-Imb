@@ -127,19 +127,17 @@ CRM-Imb/
 ## 🚧 Estado del Desarrollo
 
 - ✅ Autenticación JWT completa
-- ✅ Base de datos configurada
 - ✅ Interfaz de login/registro
 - ✅ Dashboard protegido
 - ✅ Configuración de puertos optimizada
 - ✅ Gestión de contactos con mejoras recientes
-- ✅ Pipeline de ventas
-- ✅ Cotizaciones
+- ✅ Pipeline de Ventas
 - ✅ Importación de contactos de Google
 
 ## 🤝 Contribución
 
 1. Fork el proyecto
-2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+{{ ... }}
 3. Commit cambios (`git commit -m 'feat: descripción en español'`)
 4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
 5. Abrir Pull Request
@@ -193,7 +191,7 @@ Deduplicación: se omiten contactos cuyo email o teléfono ya existan.
   - Ícono de **WhatsApp** abre `wa.me` con el número del contacto.
   - Menú “Enviar a pipeline” crea la oportunidad y marca el contacto como cliente.
 - En “Contactos”, abre “Duplicados” y utiliza “Fusionar grupo” para limpiar registros.
-- En “Cotizaciones → Historial”, si tu sesión expira verás aviso y serás redirigido a iniciar sesión.
+- En “Clientes → Historial”, si tu sesión expira verás aviso y serás redirigido a iniciar sesión.
 
 ## 🔧 Notas técnicas
 

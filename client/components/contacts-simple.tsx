@@ -331,6 +331,12 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
             </Button>
           )}
           <Button variant="brand" onClick={()=> setOpenNew(true)}>Nuevo contacto</Button>
+          {onlyClients && (
+            <Button variant="outline" onClick={()=> setHistoryOpen(true)} title="Historial de cotizaciones">
+              <HistoryIcon className="h-4 w-4 mr-2" />
+              Historial
+            </Button>
+          )}
           {!onlyClients && (
             <Button variant="outline" onClick={()=> load()} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
           )}
@@ -450,7 +456,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
           </DialogHeader>
           <div className="px-6 pb-6">
             {simulateContact && (
-              <QuoteSimulator contactoId={simulateContact.id!} clienteNombre={simulateContact.nombre} />
+              <QuoteSimulator contactoId={simulateContact.id!} clienteNombre={simulateContact.nombre} preloadSavedQuotes={false} />
             )}
           </div>
         </DialogContent>

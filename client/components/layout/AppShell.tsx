@@ -3,7 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, Search, Users, LayoutGrid, BarChart3, CalendarDays, FileText, LogOut, Building2, Settings, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { Bell, Search, Users, LayoutGrid, BarChart3, CalendarDays, LogOut, Building2, Settings, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -15,7 +15,6 @@ const NavIcon: Record<string, React.ReactNode> = {
   pipeline: <LayoutGrid className="size-4" />,
   contacts: <Users className="size-4" />,
   clients: <Users className="size-4" />,
-  properties: <FileText className="size-4" />,
   activities: <CalendarDays className="size-4" />,
   statistics: <BarChart3 className="size-4" />,
 }
@@ -35,7 +34,6 @@ export function AppShell({
     { key: "pipeline", label: "Pipeline" },
     { key: "contacts", label: "Contactos" },
     { key: "clients", label: "Clientes" },
-    { key: "properties", label: "Cotizaciones" },
     { key: "activities", label: "Actividades" },
     { key: "statistics", label: "Estadísticas" },
   ]

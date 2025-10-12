@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { upsertQuoteByContact, getQuoteByContact, QuotePayload } from "@/lib/quotes"
-import { fetchContacts, ContactDTO } from "@/lib/contacts"
+import { fetchContacts, getContact, ContactDTO } from "@/lib/contacts"
 import { createOpportunity } from "@/lib/opportunities"
 
 export interface QuoteSimulatorProps {
   contactoId?: number
   clienteNombre?: string
+  preloadSavedQuotes?: boolean // when true, try to load saved quote by contact
 }
 
 type Row = {
@@ -34,9 +35,9 @@ function formatCurrencyPEN(n: number) {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 }
 
-type PaymentMode = 'fija' | 'flexible'
+type PaymentMode = 'fija' | 'flexible' | 'especial'
 
-function generateAmortization({ principal, periods, teaPct, mode = 'fija', targetPayment = 500 }: { principal: number; periods: number; teaPct: number; mode?: PaymentMode; targetPayment?: number; }) {
+function generateAmortization({ principal, periods, teaPct, mode = 'fija', targetPayment = 500, periodLen = 3 }: { principal: number; periods: number; teaPct: number; mode?: PaymentMode; targetPayment?: number; periodLen?: number; }) {
   const TEM = calcTEM(teaPct)
   let cuotaBaseAnualidad = 0
   if (TEM === 0) {
@@ -55,12 +56,21 @@ function generateAmortization({ principal, periods, teaPct, mode = 'fija', targe
     let cuotaBase = cuotaBaseAnualidad
     if (mode === 'flexible') {
       if (i < periods) {
-        const mult = 0.7 + Math.random() * 0.6 // 0.7x a 1.3x
-        const proposed = targetPayment * mult
-        const minPayment = Math.max(proposed, interest + 1)
-        cuotaBase = Math.min(minPayment, remaining + interest)
+        // Primeros N-1 meses: cuota fija objetivo
+        // Si el objetivo supera el saldo+interés (quedaría negativo), limitamos al saldo+interés
+        cuotaBase = Math.min(targetPayment, remaining + interest)
       } else {
+        // Último mes: se liquida todo el saldo
         cuotaBase = remaining + interest
+      }
+    } else if (mode === 'especial') {
+      // Pagos cada periodLen meses con monto objetivo; el último mes siempre liquida todo.
+      if (i === periods) {
+        cuotaBase = remaining + interest
+      } else if (i % periodLen === 0) {
+        cuotaBase = Math.min(targetPayment, remaining + interest)
+      } else {
+        cuotaBase = 0
       }
     }
     const amortization = Math.max(0, cuotaBase - interest)
@@ -80,7 +90,7 @@ function generateAmortization({ principal, periods, teaPct, mode = 'fija', targe
   return { schedule, totals }
 }
 
-export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProps) {
+export function QuoteSimulator({ contactoId, clienteNombre, preloadSavedQuotes = true }: QuoteSimulatorProps) {
   const { toast } = useToast()
   const [clientName, setClientName] = React.useState<string>(clienteNombre || "")
   const [phone, setPhone] = React.useState<string>("")
@@ -88,25 +98,28 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
   const [suggestions, setSuggestions] = React.useState<ContactDTO[]>([])
   const [searching, setSearching] = React.useState<boolean>(false)
   const [selectedContactId, setSelectedContactId] = React.useState<number|undefined>(contactoId)
-  const [amount, setAmount] = React.useState<string>("17000")
+  const [amount, setAmount] = React.useState<string>("0")
   const [months, setMonths] = React.useState<string>("24")
-  const [tea, setTea] = React.useState<string>("18")
+  const [tea, setTea] = React.useState<string>("0")
   const [currency, setCurrency] = React.useState<'PEN'|'USD'>("PEN")
   const [paymentMode, setPaymentMode] = React.useState<PaymentMode>('fija')
   const [initial, setInitial] = React.useState<string>('0')
   const [targetPayment, setTargetPayment] = React.useState<string>('500')
+  const [specialPeriod, setSpecialPeriod] = React.useState<'3'|'6'>('3')
+  const [specialTarget, setSpecialTarget] = React.useState<string>('500')
   const [loading, setLoading] = React.useState(false)
   const [sending, setSending] = React.useState(false)
   const [results, setResults] = React.useState<{ schedule: Row[]; totals: { monthlyPayment: number; totalInterest: number; totalDesgravamen: number; totalITF: number; totalToPay: number } } | null>(null)
 
   React.useEffect(() => {
-    // Precargar si tenemos contactoId
+    // Precarga controlada por prop
     (async()=>{
       if (!contactoId) return
+      if (!preloadSavedQuotes) return
       try {
         const row = await getQuoteByContact(contactoId)
         if (row) {
-          setClientName(row.cliente_nombre || clientName)
+          setClientName(prev => row.cliente_nombre || prev)
           setAmount(String(row.monto))
           setMonths(String(row.plazo_meses))
           setTea(String(row.tea))
@@ -123,12 +136,19 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                 totalToPay: Number(row.total_pagar || 0),
               }
             })
+            return
           } catch {}
+        } else {
+          // Si no hay fila guardada, autogenerar para vista previa
+          setTimeout(() => { onGenerate() }, 0)
         }
-      } catch {}
+      } catch {
+        // En caso de error, intentar al menos autogenerar
+        setTimeout(() => { onGenerate() }, 0)
+      }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contactoId])
+  }, [contactoId, preloadSavedQuotes])
 
   // Unified lookup by name/apellido or phone (>=3 chars or >=6 digits)
   React.useEffect(() => {
@@ -168,9 +188,11 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
     const n = Number(months||0)
     const t = Number(tea||0)
     const tp = Number(targetPayment||500)
+    const sp = Number(specialTarget||500)
+    const per = Number(specialPeriod||'3')
     if (!clientName.trim()) { toast({ title:'Falta cliente', variant:'destructive' }); return }
     if (!(p>0) || !(n>0)) { toast({ title:'Monto/plazo inválidos', variant:'destructive' }); return }
-    const data = generateAmortization({ principal: p, periods: n, teaPct: t, mode: paymentMode, targetPayment: tp })
+    const data = generateAmortization({ principal: p, periods: n, teaPct: t, mode: paymentMode, targetPayment: paymentMode==='especial' ? sp : tp, periodLen: paymentMode==='especial' ? per : 3 })
     setResults(data)
   }
 
@@ -411,6 +433,7 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                   <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
                     <SelectItem value="fija">Cuota fija (constante)</SelectItem>
                     <SelectItem value="flexible">Cuota flexible</SelectItem>
+                    <SelectItem value="especial">Cuota especial</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -420,6 +443,27 @@ export function QuoteSimulator({ contactoId, clienteNombre }: QuoteSimulatorProp
                   <Input type="number" min="1" step="1" value={targetPayment} onChange={(e)=> setTargetPayment(e.target.value)} />
                   <div className="text-[11px] text-gray-500">Por defecto 500. En el último mes se liquida el saldo.</div>
                 </div>
+              )}
+              {paymentMode === 'especial' && (
+                <>
+                  <div>
+                    <label className="text-xs text-gray-600">Periodicidad</label>
+                    <Select value={specialPeriod} onValueChange={(v)=> setSpecialPeriod(v as '3'|'6')}>
+                      <SelectTrigger className="w-full bg-white border border-gray-300 text-gray-800">
+                        <SelectValue placeholder="Trimestral (cada 3 meses)" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border border-gray-200 text-gray-900 shadow-lg">
+                        <SelectItem value="3">Trimestral (cada 3 meses)</SelectItem>
+                        <SelectItem value="6">Semestral (cada 6 meses)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600">Cuota especial objetivo (PEN)</label>
+                    <Input type="number" min="1" step="1" value={specialTarget} onChange={(e)=> setSpecialTarget(e.target.value)} />
+                    <div className="text-[11px] text-gray-500">Se paga el monto objetivo cada {specialPeriod} meses; el último mes liquida el saldo.</div>
+                  </div>
+                </>
               )}
               {paymentMode === 'fija' && (
                 <div>
