@@ -27,7 +27,9 @@ class GoogleContactsController {
         'https://www.googleapis.com/auth/contacts',
         'https://www.googleapis.com/auth/userinfo.profile',
         // Para leer "Other Contacts" (sugeridos de Gmail)
-        'https://www.googleapis.com/auth/contacts.other.readonly'
+        'https://www.googleapis.com/auth/contacts.other.readonly',
+        // Calendar events (crear y listar)
+        'https://www.googleapis.com/auth/calendar.events'
       ];
 
       // Incluir el id de usuario en state para persistir tokens en callback
