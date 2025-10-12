@@ -1,17 +1,15 @@
 "use client"
 
 import * as React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
+import { WeekCalendar, getWeekRange } from "@/components/activities/WeekCalendar"
 
 export function ActivitiesList() {
   const { toast } = useToast()
   const [items, setItems] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(false)
-  const [from, setFrom] = React.useState<string>(() => new Date(Date.now() - 7*24*60*60*1000).toISOString().slice(0,10))
-  const [to, setTo] = React.useState<string>(() => new Date(Date.now() + 30*24*60*60*1000).toISOString().slice(0,10))
+  const [anchor, setAnchor] = React.useState<Date>(new Date())
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
   const buildAuthHeaders = () => {
@@ -21,12 +19,13 @@ export function ActivitiesList() {
     return headers
   }
 
-  async function load() {
+  async function loadWeek(ref: Date) {
     setLoading(true)
     try {
-      const timeMin = new Date(`${from}T00:00:00`).toISOString()
-      const timeMax = new Date(`${to}T23:59:59`).toISOString()
-      const res = await fetch(`${apiBase}/api/google/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=100`, {
+      const { start, end } = getWeekRange(ref)
+      const timeMin = start.toISOString()
+      const timeMax = end.toISOString()
+      const res = await fetch(`${apiBase}/api/google/calendar/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&maxResults=200`, {
         credentials: 'include',
         headers: buildAuthHeaders(),
       })
@@ -40,55 +39,23 @@ export function ActivitiesList() {
     }
   }
 
-  React.useEffect(() => { load() }, [])
+  React.useEffect(() => { loadWeek(anchor) }, [anchor])
+
+  function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate()+days); return x }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end gap-3">
-        <div>
-          <label className="text-xs text-gray-600">Desde</label>
-          <Input type="date" value={from} onChange={(e)=> setFrom(e.target.value)} />
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={()=> setAnchor(addDays(anchor, -7))}>{'<'}</Button>
+        <div className="text-sm text-gray-600">
+          Semana del {getWeekRange(anchor).start.toLocaleDateString()} al {getWeekRange(anchor).end.toLocaleDateString()}
+          {loading ? ' (cargando...)' : ''}
         </div>
-        <div>
-          <label className="text-xs text-gray-600">Hasta</label>
-          <Input type="date" value={to} onChange={(e)=> setTo(e.target.value)} />
-        </div>
-        <Button onClick={load} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
+        <Button variant="outline" onClick={()=> setAnchor(new Date())}>Hoy</Button>
+        <Button variant="outline" onClick={()=> setAnchor(addDays(anchor, 7))}>{'>'}</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((ev, idx) => {
-          const start = ev.start?.dateTime || ev.start?.date
-          const end = ev.end?.dateTime || ev.end?.date
-          const meetLink = ev.hangoutLink || null
-          return (
-            <Card key={ev.id || idx}>
-              <CardHeader className="py-3">
-                <CardTitle className="text-base">
-                  {ev.summary || 'Sin título'}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-gray-700 space-y-1">
-                <div><strong>Inicio:</strong> {start ? new Date(start).toLocaleString() : '-'}</div>
-                <div><strong>Fin:</strong> {end ? new Date(end).toLocaleString() : '-'}</div>
-                {ev.location ? (<div><strong>Ubicación:</strong> {ev.location}</div>) : null}
-                {meetLink ? (
-                  <div>
-                    <a href={meetLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Abrir Meet</a>
-                  </div>
-                ) : null}
-                <div className="pt-2">
-                  <a href={ev.htmlLink} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">Abrir en Google Calendar</a>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {!loading && items.length === 0 && (
-        <div className="text-sm text-gray-500">No hay eventos en el rango seleccionado.</div>
-      )}
+      <WeekCalendar events={items} reference={anchor} />
     </div>
   )
 }

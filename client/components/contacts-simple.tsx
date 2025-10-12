@@ -42,16 +42,6 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   const [tagOptions, setTagOptions] = useState<string[]>([])
   const [openNew, setOpenNew] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [meetingOpen, setMeetingOpen] = useState(false)
-  const [meetingContact, setMeetingContact] = useState<ContactDTO | null>(null)
-  const [meetTitle, setMeetTitle] = useState('Reunión con cliente')
-  const [meetDate, setMeetDate] = useState<string>('')
-  const [meetStart, setMeetStart] = useState<string>('10:00')
-  const [meetDuration, setMeetDuration] = useState<number>(60)
-  const [meetLocation, setMeetLocation] = useState<string>('Google Meet')
-  const [meetAttendees, setMeetAttendees] = useState<string>('')
-  const [meetDesc, setMeetDesc] = useState<string>('')
-  const [meetingLoading, setMeetingLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const predefinedTags = [
     'Techo Propio',
@@ -68,6 +58,26 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
     const headers: Record<string,string> = { 'Content-Type': 'application/json' }
     if (token) headers.Authorization = `Bearer ${token}`
     return headers
+  }
+
+  // Abrir Google Calendar con evento prellenado en popup pequeño
+  function openCalendarForContact(c: ContactDTO) {
+    const title = encodeURIComponent(`Reunión con ${c.nombre}`)
+    // Rango: ahora + 1h, duración 60min
+    const start = new Date()
+    start.setMinutes(start.getMinutes() + 60)
+    const end = new Date(start.getTime() + 60*60000)
+    const pad = (n:number)=> String(n).padStart(2,'0')
+    const toG = (d:Date)=> `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`
+    const datesParam = `${toG(start)}/${toG(end)}`
+    const details = encodeURIComponent('')
+    const location = encodeURIComponent('Google Meet')
+    const attendees = [c.email].filter(Boolean).map(a=> `&add=${encodeURIComponent(a!)}`).join('')
+    const url = `https://calendar.google.com/calendar/u/0/r/eventedit?text=${title}&dates=${datesParam}&details=${details}&location=${location}${attendees}`
+    const w = 600, h = 700
+    const y = window.top?.outerHeight ? Math.max(0, (window.top.outerHeight - h) / 2) : 80
+    const x = window.top?.outerWidth ? Math.max(0, (window.top.outerWidth - w) / 2) : 80
+    window.open(url, 'gcal_event', `width=${w},height=${h},left=${x},top=${y},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,status=no`)
   }
 
   // Evitar enviar strings vacíos o fecha vacía que rompa en BD
@@ -394,7 +404,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
                             <DropdownMenuItem onClick={()=> { setSimulateContact(c); setSimulateOpen(true) }}>
                               <PlusCircle className="h-4 w-4 mr-2"/> Simular cotización
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={()=> { setMeetingContact(c); setMeetTitle(`Reunión con ${c.nombre}`); setMeetingOpen(true) }}>
+                            <DropdownMenuItem onClick={()=> { openCalendarForContact(c) }}>
                               <PlusCircle className="h-4 w-4 mr-2"/> Agendar reunión
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={async ()=>{
@@ -475,80 +485,7 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Agendar reunión */}
-      <Dialog open={meetingOpen} onOpenChange={(o)=> { setMeetingOpen(o); if(!o){ setMeetingContact(null); setMeetTitle('Reunión con cliente'); setMeetDate(''); setMeetStart('10:00'); setMeetDuration(60); setMeetLocation('Google Meet'); setMeetAttendees(''); setMeetDesc('') } }}>
-        <DialogContent className="max-w-lg w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>Agendar reunión</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-gray-600">Título</label>
-              <Input value={meetTitle} onChange={(e)=> setMeetTitle(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-600">Fecha</label>
-                <Input type="date" value={meetDate} onChange={(e)=> setMeetDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Hora inicio</label>
-                <Input type="time" value={meetStart} onChange={(e)=> setMeetStart(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-gray-600">Duración (min)</label>
-                <Input type="number" min="15" step="15" value={String(meetDuration)} onChange={(e)=> setMeetDuration(Number(e.target.value||60))} />
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Ubicación</label>
-                <Input value={meetLocation} onChange={(e)=> setMeetLocation(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs text-gray-600">Invitados (emails separados por coma)</label>
-              <Input placeholder="ej. cliente@correo.com, otro@correo.com" value={meetAttendees} onChange={(e)=> setMeetAttendees(e.target.value)} />
-            </div>
-            <div>
-              <label className="text-xs text-gray-600">Descripción</label>
-              <Input value={meetDesc} onChange={(e)=> setMeetDesc(e.target.value)} />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={()=> setMeetingOpen(false)}>Cancelar</Button>
-              <Button disabled={meetingLoading} onClick={async ()=>{
-                try {
-                  if (!meetingContact) { toast({ title:'Sin contacto', variant:'destructive' }); return }
-                  if (!meetDate || !meetStart) { toast({ title:'Fecha y hora requeridas', variant:'destructive' }); return }
-                  setMeetingLoading(true)
-                  const [hh, mm] = meetStart.split(':').map(Number)
-                  const startISO = new Date(`${meetDate}T${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`).toISOString()
-                  const endISO = new Date(new Date(startISO).getTime() + meetDuration*60000).toISOString()
-                  const headers = buildAuthHeaders()
-                  const body = {
-                    title: meetTitle || `Reunión con ${meetingContact.nombre}`,
-                    description: meetDesc,
-                    start: startISO,
-                    end: endISO,
-                    location: meetLocation,
-                    attendees: [meetingContact.email, ...meetAttendees.split(',')].map(s=> (s||'').trim()).filter(Boolean),
-                    meet: true,
-                    timeZone: 'America/Lima'
-                  }
-                  const res = await fetch(`${apiBase}/api/google/calendar/events`, { method:'POST', headers, credentials:'include', body: JSON.stringify(body) })
-                  const js = await res.json().catch(()=> ({}))
-                  if (!res.ok) throw new Error(js?.message || 'No se pudo crear el evento')
-                  const meetLink = js?.data?.hangoutLink || js?.data?.htmlLink
-                  toast({ title:'Reunión agendada', description: meetLink ? `Link: ${meetLink}` : 'Creado en Google Calendar' })
-                  setMeetingOpen(false)
-                } catch(e:any) {
-                  toast({ title:'Error', description: e.message || 'No se pudo agendar', variant:'destructive' })
-                } finally { setMeetingLoading(false) }
-              }}>Agendar</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      
 
       {/* Historial de cotizaciones (global) visible solo desde Clientes) */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
