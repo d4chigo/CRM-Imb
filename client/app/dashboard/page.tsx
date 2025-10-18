@@ -10,6 +10,7 @@ import { PipelineProvider } from '@/contexts/PipelineContext'
 import { DashboardTabsProvider, useDashboardTabs } from '@/contexts/DashboardTabsContext'
 import { useAuth, useRequireAuth } from "@/contexts/AuthContext"
 import { StatsDashboard } from "@/components/stats-dashboard"
+import { AIMarketingAdvisor } from "@/components/ai/AIMarketingAdvisor"
 import { AppShell } from "@/components/layout/AppShell"
 import { ActivitiesList } from "@/components/activities/ActivitiesList"
 
@@ -104,6 +105,16 @@ function DashboardInner() {
               </CardHeader>
               <CardContent>
                 <StatsDashboard />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Asesor de Marketing con IA</CardTitle>
+                <CardDescription>Genera insights y un plan de acción para mejorar captación y conversión.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AIMarketingAdvisor />
               </CardContent>
             </Card>
           </TabsContent>

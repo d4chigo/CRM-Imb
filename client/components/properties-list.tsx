@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Bed, Bath, Car, Maximize, MapPin, DollarSign } from "lucide-react"
+import { Search, Plus } from "lucide-react"
 
 // TODO: Conectar con datos reales de la base de datos
 // Datos de ejemplo eliminados - deben cargarse desde la BD
@@ -83,12 +83,10 @@ export function PropertiesList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold" style={{ color: "#303030" }}>
-            Propiedades
-          </h2>
-          <p className="text-gray-600">Catálogo de propiedades disponibles</p>
+          <h2 className="text-[20px] font-semibold text-foreground">Propiedades</h2>
+          <p className="text-sm text-muted-foreground">Catálogo de propiedades disponibles</p>
         </div>
         <Button variant="brand">
           <Plus className="h-4 w-4 mr-2" />
@@ -96,43 +94,59 @@ export function PropertiesList() {
         </Button>
       </div>
 
-      {/* Filters */}
+      {/* Toolbar estilo iOS/enterprise */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="relative md:flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Buscar propiedades..."
+                  placeholder="Buscar por código, dirección o nombre…"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-10 bg-white"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-gray-600">Estado</div>
+                <div className="inline-flex rounded-lg border bg-white overflow-hidden">
+                  {[
+                    { k: 'all', t: 'Todos' },
+                    { k: 'disponible', t: 'Disponible' },
+                    { k: 'reservada', t: 'Reservada' },
+                    { k: 'vendida', t: 'Vendida' },
+                  ].map(opt => (
+                    <button
+                      key={opt.k}
+                      onClick={()=> setSelectedStatus(opt.k)}
+                      className={`px-3 py-2 text-xs border-r last:border-r-0 ${selectedStatus===opt.k? 'bg-[var(--sidebar-active)] text-white' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >{opt.t}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-gray-600">Tipo</div>
+                <div className="inline-flex rounded-lg border bg-white overflow-hidden">
+                  {[
+                    { k: 'all', t: 'Todos' },
+                    { k: 'apartamento', t: 'Apartamento' },
+                    { k: 'casa', t: 'Casa' },
+                    { k: 'terreno', t: 'Terreno' },
+                    { k: 'comercial', t: 'Comercial' },
+                  ].map(opt => (
+                    <button
+                      key={opt.k}
+                      onClick={()=> setSelectedType(opt.k)}
+                      className={`px-3 py-2 text-xs border-r last:border-r-0 ${selectedType===opt.k? 'bg-[var(--sidebar-active)] text-white' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >{opt.t}</button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={selectedStatus === "all" ? "brand" : "outline"}
-                size="sm"
-                onClick={() => setSelectedStatus("all")}
-              >
-                Todos los Estados
-              </Button>
-              <Button
-                variant={selectedStatus === "disponible" ? "brand" : "outline"}
-                size="sm"
-                onClick={() => setSelectedStatus("disponible")}
-              >
-                Disponible
-              </Button>
-              <Button
-                variant={selectedStatus === "reservada" ? "brand" : "outline"}
-                size="sm"
-                onClick={() => setSelectedStatus("reservada")}
-              >
-                Reservada
-              </Button>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-500">{filteredProperties.length} resultados</div>
+              <div className="text-xs text-gray-500">Ordenar: Relevancia</div>
             </div>
           </div>
         </CardContent>

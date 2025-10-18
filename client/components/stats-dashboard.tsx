@@ -16,12 +16,14 @@ import {
   LinearScale,
   BarElement,
   Title as ChartTitle,
+  PointElement,
+  LineElement,
 } from "chart.js"
-import { Pie, Bar } from "react-chartjs-2"
+import { Pie, Bar, Line } from "react-chartjs-2"
 
 interface StatItem { label: string; count: number }
 
-ChartJS.register(ArcElement, ChartTooltip, ChartLegend, CategoryScale, LinearScale, BarElement, ChartTitle)
+ChartJS.register(ArcElement, ChartTooltip, ChartLegend, CategoryScale, LinearScale, BarElement, ChartTitle, PointElement, LineElement)
 
 function useThemeColor(varName: string, fallback: string) {
   return useMemo(() => {
@@ -60,7 +62,7 @@ export function StatsDashboard() {
   const [ageTo, setAgeTo] = useState<number>(25)
 
   // UI state
-  const [activeTab, setActiveTab] = useState<'sex' | 'dept' | 'age'>('sex')
+  const [activeTab, setActiveTab] = useState<'sex' | 'dept' | 'age'>('age')
   
   function limitFromKey(key: string): number | undefined {
     const n = parseInt(key, 10)
@@ -91,11 +93,11 @@ export function StatsDashboard() {
     setCustomRanges(prev => prev.filter((_, i) => i !== idx))
   }
 
-  async function fetchInitial() {
-    const r = await authService.authenticatedFetch(`/api/stats/contacts/by-sex`)
+  async function fetchInitialAge() {
+    const r = await authService.authenticatedFetch(`/api/stats/contacts/by-age`)
     const j = await r.json()
-    if (!j.success) throw new Error('Error de API de estadísticas (sexo)')
-    setBySex(j.data)
+    if (!j.success) throw new Error('Error de API de estadísticas (edades)')
+    setByAge(j.data)
   }
 
   async function applyDept() {
@@ -137,7 +139,7 @@ export function StatsDashboard() {
     async function load() {
       try {
         setLoading(true)
-        await fetchInitial()
+        await fetchInitialAge()
       } catch (e: any) {
         if (!mounted) return
         setError(e?.message || 'Error cargando estadísticas')
@@ -154,23 +156,25 @@ export function StatsDashboard() {
   const mutedFg = useThemeColor('--muted-foreground', '#6b7280')
   const border = useThemeColor('--border', '#e5e7eb')
 
-  const pieSexData = useMemo(() => {
+  const lineSexData = useMemo(() => {
     const labels = bySex.map(d => d.label)
     const data = bySex.map(d => d.count)
-    const bg = labels.map((_, i) => defaultPalette[i % defaultPalette.length])
-    const borderColors = bg.map(c => c)
     return {
       labels,
       datasets: [
         {
+          label: 'Contactos',
           data,
-          backgroundColor: bg,
-          borderColor: borderColors,
-          borderWidth: 1,
-        },
-      ],
+          borderColor: primary,
+          backgroundColor: primary + '33',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 4,
+          pointBackgroundColor: primary,
+        }
+      ]
     }
-  }, [bySex])
+  }, [bySex, primary])
 
   const barDeptData = useMemo(() => {
     const labels = byDept.map(d => d.label)
@@ -234,6 +238,26 @@ export function StatsDashboard() {
     },
   }), [fg, mutedFg, border])
 
+  const lineOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'white',
+        titleColor: fg,
+        bodyColor: fg,
+        borderColor: border,
+        borderWidth: 1,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: mutedFg } },
+      y: { grid: { color: border }, ticks: { color: mutedFg }, beginAtZero: true },
+    },
+  }), [fg, mutedFg, border])
+
   const pieOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -290,7 +314,7 @@ export function StatsDashboard() {
             </CardHeader>
             <CardContent>
               <div className="h-[280px] relative">
-                <Pie data={pieSexData} options={pieOptions} />
+                <Line data={lineSexData} options={lineOptions} />
               </div>
             </CardContent>
           </Card>

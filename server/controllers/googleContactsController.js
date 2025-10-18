@@ -29,7 +29,9 @@ class GoogleContactsController {
         // Para leer "Other Contacts" (sugeridos de Gmail)
         'https://www.googleapis.com/auth/contacts.other.readonly',
         // Calendar events (crear y listar)
-        'https://www.googleapis.com/auth/calendar.events'
+        'https://www.googleapis.com/auth/calendar.events',
+        // Calendar readonly (listar calendarios secundarios y sus eventos)
+        'https://www.googleapis.com/auth/calendar.readonly'
       ];
 
       // Incluir el id de usuario en state para persistir tokens en callback

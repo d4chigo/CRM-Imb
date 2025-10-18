@@ -24,6 +24,7 @@ const googleCalendarRoutes = require('./routes/google-calendar');
 const statsRoutes = require('./routes/stats');
 const cotizacionesRoutes = require('./routes/cotizaciones');
 const quotesRoutes = require('./routes/quotes');
+const aiRoutes = require('./routes/ai');
 
 const app = express();
 
@@ -77,6 +78,7 @@ app.use('/api/google/calendar', googleCalendarRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/cotizaciones', cotizacionesRoutes);
 app.use('/api/quotes', quotesRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Ruta de health check
 app.get('/api/health', (req, res) => {

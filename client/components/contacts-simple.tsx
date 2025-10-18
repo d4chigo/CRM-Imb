@@ -320,31 +320,38 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex-1">
+        <div className="flex-1 min-w-[260px]">
           <label className="text-xs text-gray-600">Buscar</label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Nombre, teléfono o email" className="pl-9" />
+            <Input value={search} onChange={(e)=> setSearch(e.target.value)} placeholder="Nombre, teléfono o email" className="pl-9 h-10 bg-white" />
           </div>
+        </div>
 
-          {onlyClients && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="text-xs text-gray-600 flex items-center gap-1"><FilterIcon className="h-4 w-4"/>Filtros</div>
-              <select value={tagFilter} onChange={(e)=> { setTagFilter(e.target.value); setPage(1); load(1) }} className="border rounded-md h-8 px-2 text-sm bg-white">
-                <option value="">Etiqueta: Todas</option>
-                {tagOptions.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </select>
-              <select value={stageFilter} onChange={(e)=> { setStageFilter(e.target.value); setPage(1); load(1) }} className="border rounded-md h-8 px-2 text-sm bg-white">
-                <option value="">Etapa: Todas</option>
-                {stages.map(s => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
-                ))}
-              </select>
+        {onlyClients && (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-600 flex items-center gap-1"><FilterIcon className="h-4 w-4"/>Filtros</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-lg border bg-white overflow-hidden">
+                <select value={tagFilter} onChange={(e)=> { setTagFilter(e.target.value); setPage(1); load(1) }} className="h-9 px-2 text-sm bg-white outline-none">
+                  <option value="">Etiqueta: Todas</option>
+                  {tagOptions.map(tag => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+                <div className="h-9 w-px bg-gray-200"/>
+                <select value={stageFilter} onChange={(e)=> { setStageFilter(e.target.value); setPage(1); load(1) }} className="h-9 px-2 text-sm bg-white outline-none">
+                  <option value="">Etapa: Todas</option>
+                  {stages.map(s => (
+                    <option key={s.id} value={s.id}>{s.title}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          )}
-        <div className="flex gap-2">
+          </div>
+        )}
+
+        <div className="flex gap-2 ml-auto">
           {excludeClients && (
             <Button variant="outline" onClick={importFromGoogle} disabled={importing || loading}>
               {importing ? 'Importando…' : 'Importar Google'}
@@ -361,7 +368,6 @@ export function ContactsSimple({ onlyClients = false, excludeClients = false }: 
             <Button variant="outline" onClick={()=> load()} disabled={loading}>{loading ? 'Cargando…' : 'Actualizar'}</Button>
           )}
         </div>
-      </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

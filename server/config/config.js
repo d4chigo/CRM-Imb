@@ -3,11 +3,14 @@
 const path = require('path');
 const fs = require('fs');
 const rootEnv = path.resolve(__dirname, '../../.env');
+const localEnv = path.resolve(__dirname, '../.env');
+
+// Cargar primero el .env del root si existe
 if (fs.existsSync(rootEnv)) {
   require('dotenv').config({ path: rootEnv });
-} else {
-  require('dotenv').config();
 }
+// Luego cargar el .env local del servidor para que sobreescriba valores del root
+require('dotenv').config({ path: localEnv });
 
 const config = {
   // Configuración del servidor
@@ -54,5 +57,11 @@ if (process.env.NODE_ENV === 'development') {
     GOOGLE_CLIENT_ID: !!process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI || null
+  });
+  console.log('[config] AI keys presentes:', {
+    OPENAI: !!process.env.OPENAI_API_KEY,
+    GEMINI: !!process.env.GEMINI_API_KEY,
+    DEEPSEEK: !!process.env.DEEPSEEK_API_KEY,
+    VENICE: !!process.env.VENICE_API_KEY,
   });
 }

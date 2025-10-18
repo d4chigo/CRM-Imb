@@ -80,20 +80,75 @@ class GoogleCalendarService {
     return data;
   }
 
-  static async listEvents(userId, { timeMin, timeMax, maxResults = 50 }) {
+  static async listEvents(userId, { timeMin, timeMax, maxResults = 50, calendarId = null }) {
     const auth = await this.getAuthClient(userId);
     if (!auth) throw new Error('No conectado a Google');
 
     const calendar = google.calendar({ version: 'v3', auth });
-    const { data } = await calendar.events.list({
-      calendarId: 'primary',
+    const range = {
       timeMin: timeMin || new Date(Date.now() - 7*24*60*60*1000).toISOString(),
       timeMax: timeMax || new Date(Date.now() + 30*24*60*60*1000).toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults,
+    }
+
+    // If a specific calendarId is provided, query only that
+    if (calendarId) {
+      const { data } = await calendar.events.list({
+        calendarId,
+        ...range,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults,
+      });
+      return data.items || [];
+    }
+
+    // Else: merge events from 'primary' and all visible calendars
+    const results = [];
+    try {
+      // Always include 'primary'
+      const primary = await calendar.events.list({
+        calendarId: 'primary',
+        ...range,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults,
+      });
+      results.push(...(primary.data.items || []));
+    } catch (e) { /* ignore primary failure */ }
+
+    try {
+      const list = await calendar.calendarList.list({ maxResults: 250 });
+      const cals = (list.data.items || []).filter(c => c.id !== 'primary');
+      for (const cal of cals) {
+        try {
+          const { data } = await calendar.events.list({
+            calendarId: cal.id,
+            ...range,
+            singleEvents: true,
+            orderBy: 'startTime',
+            maxResults,
+          });
+          results.push(...(data.items || []).map(ev => ({ ...ev, _calendarId: cal.id })));
+        } catch (_) { /* skip this calendar */ }
+      }
+    } catch (_) { /* ignore calendar list failures */ }
+
+    // De-duplicate by event id + start
+    const seen = new Set();
+    const merged = [];
+    for (const ev of results) {
+      const key = `${ev.id || ''}-${ev.start?.dateTime || ev.start?.date || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(ev);
+    }
+    // Sort by start
+    merged.sort((a,b)=>{
+      const sa = new Date(a.start?.dateTime || a.start?.date || 0).getTime();
+      const sb = new Date(b.start?.dateTime || b.start?.date || 0).getTime();
+      return sa - sb;
     });
-    return data.items || [];
+    return merged;
   }
 }
 
